@@ -1,0 +1,17 @@
+node_modules/
+.git/
+dist/
+build/
+.next/
+__pycache__/
+*.pyc
+.venv/
+venv/
+coverage/
+.pytest_cache/
+*.log
+package-lock.json
+yarn.lock
+*.lock
+.env
+.env.*

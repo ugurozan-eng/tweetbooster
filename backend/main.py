@@ -1,0 +1,41 @@
+"""
+TwitBoost — FastAPI Backend
+Phase 1 MVP: Core AI pipeline, no auth, no payments.
+"""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = FastAPI(
+    title="TwitBoost API",
+    description="AI-powered Twitter reply tool — Opposition & Niche modes",
+    version="0.1.0",
+)
+
+# ---------------------------------------------------------------------------
+# CORS — development allows all origins; tighten in Phase 2 production deploy
+# ---------------------------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # TODO(Phase 2): restrict to Vercel domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------------------------------------------------------
+# Routers — added as each sprint delivers them
+# ---------------------------------------------------------------------------
+# from routers import opposition, niche   # uncomment in Sprint 1.2+
+
+
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+@app.get("/health", tags=["meta"])
+async def health() -> dict:
+    """Liveness probe — returns API version and status."""
+    return {"status": "ok", "version": "0.1.0"}
