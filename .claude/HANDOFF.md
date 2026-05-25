@@ -6,70 +6,64 @@
 
 ## Last Completed Sprint
 
-**Sprint 1.4 — Niche Mode**
-**Commit:** `5045d34`
+**Sprint 1.5 — Frontend MVP**
+**Commit:** `fc683c3`
 **Date:** 2026-05-25
 
 ### What was built
 
 | File | Purpose |
 |------|---------|
-| `backend/config/__init__.py` | Makes config/ a package |
-| `backend/config/niches.py` | Single source of truth for 4 niches (food, football, economy, politics). `NicheConfig` TypedDict, `get_niche()`, `all_niches()`, `VALID_NICHE_IDS`. |
-| `backend/prompts/niche_tweet_scorer.txt` | Claude prompt: scores tweet candidates 0–10 on 5 criteria, returns `{scored_tweets: [...]}` sorted desc |
-| `backend/prompts/niche_reply_generator.txt` | Claude prompt: generates 3 replies ≤240 chars with hook_type (question/opinion/fact) |
-| `backend/services/niche_agent.py` | `get_trending(niche_id, hours)` → scored list; `generate_reply(tweet_text, niche_id)` → filtered replies; `NicheReplyBlockedError` if all blocked |
-| `backend/routers/niche.py` | `POST /api/niche/trending` + `POST /api/niche/reply`; Turkish 422 for invalid niche |
-| `backend/main.py` | Niche router registered |
-| `backend/tests/test_niche_agent.py` | 19 new tests |
+| `frontend/lib/api.ts` | Single API client: `identifyPerson`, `runOppositionAnalysis`, `getNicheTrending`, `generateNicheReply`. Full TypeScript types. `ApiError` class with status code. Turkish error messages. |
+| `frontend/app/layout.tsx` | Root layout: `lang="tr"`, dark `zinc-950` bg, sticky nav with TwitBoost logo + Muhalif/Niş links. |
+| `frontend/app/page.tsx` | Landing page: product name + two mode cards linking to `/opposition` and `/niche`. |
+| `frontend/app/opposition/page.tsx` | Full Opposition Mode UI: tweet input, 3 tone checkboxes, loading state, person card, contradictions list, reply cards with copy-to-clipboard, error banner. |
+| `frontend/app/niche/page.tsx` | Full Niche Mode UI: 2×2 niche selector, hours dropdown, tweet list with score badges, per-tweet inline reply generation with hook_type badges and copy buttons. |
+| `frontend/env.local.example` | `NEXT_PUBLIC_API_URL=http://localhost:8000` (renamed without leading dot to avoid `.gitignore`). |
 
-### Test count
-**84 / 84 passing** (was 65 at end of Sprint 1.3)
+### Build & Type check
+- `tsc --noEmit` → **0 errors**
+- `next build` → **6/6 pages OK**, Turbopack, zero errors
+- Backend tests: **84 / 84 passing** (unchanged from Sprint 1.4)
 
 ---
 
 ## Next Sprint
 
-**Sprint 1.5 — Frontend MVP**
+**Sprint 1.6 — Connect & Polish**
 
-Build the Next.js UI that connects to the FastAPI backend already running on Railway (or locally). Phase 1 — no auth, no payments. Two pages:
+The UI and backend are complete independently. Next tasks:
 
-1. **Opposition Mode page** (`/opposition`)
-   - Text area: paste a tweet
-   - Tone selector: cold / sharp / thread (checkboxes)
-   - "Analiz Et" button → POST `/api/opposition/analyze`
-   - Display: person name + contradiction list + 1–3 replies side-by-side
-   - Source URLs shown as links
+1. **End-to-end manual test** with a real backend running locally:
+   - Start backend (`uvicorn main:app --reload`)
+   - Start frontend (`npm run dev`)
+   - Paste a real Turkish tweet into opposition mode
+   - Fetch trending in niche mode and generate a reply
+   - Fix any integration issues found
 
-2. **Niche Mode page** (`/niche`)
-   - Dropdown: select niche (populated from API or hardcoded from niches config)
-   - "Trendleri Getir" button → POST `/api/niche/trending`
-   - Tweet list with score badges
-   - Click a tweet → text pre-fills reply box
-   - "Yanıt Üret" button → POST `/api/niche/reply`
-   - Show 3 replies with hook_type label
+2. **Error handling polish** (if needed after E2E test):
+   - Network timeout handling (add `signal: AbortSignal.timeout(30000)` to fetch)
+   - Better loading text for long-running opposition analysis (~20–30s expected)
 
-### Design constraints (from PRD)
-- Tailwind CSS only — no external UI library
-- Mobile-first, responsive
-- Turkish language throughout
-- No TypeScript `any` types
-- API base URL from `NEXT_PUBLIC_API_URL` env var
+3. **`NEXT_PUBLIC_API_URL` documentation** — update `README.md` with frontend setup instructions
 
-### Skills to load
-- `frontend-backend` — during API connection
-- `frontend-design` — during component work
+4. **Optional Sprint 1.6 extras:**
+   - Persist selected niche in `localStorage` so it survives page refresh
+   - Show tweet character count in opposition textarea
+   - `next.config.ts`: add `output: 'standalone'` for Railway deploy
 
 ---
 
 ## Active Blockers / Notes
 
-- **Brave free tier has no time-range filter.** `hours` param in `get_trending` is stored but not forwarded to Brave. When upgrading to a paid Brave plan, add `freshness=ph` query param.
-- **Next.js version is 16.2.6** (latest as of May 2026), not "15" as written in PRD. PRD should be updated.
-- **CORS is `allow_origins=["*"]`** — acceptable for Phase 1 local dev, must be restricted to Vercel domain in Phase 2.
-- **No auth in Phase 1** — all endpoints are open. Do not add middleware or JWT tokens yet.
-- **Legal filter word list** lives in `services/legal_safety_filter.py`. It will need expansion before public launch.
-- **Twitter API not integrated** — all tweet discovery via Brave Search. Phase 3 task.
+- **`.env.local.example` renamed to `env.local.example`** (no leading dot) because the frontend `.gitignore` has `.env*` which would block it. Remember to rename to `.env.local` when setting up locally.
+- **Copy-to-clipboard uses `navigator.clipboard` + `execCommand` fallback.** Both require user gesture (button click) — this is correctly implemented.
+- **Opposition analysis can take 20–30 seconds** (Brave Search + multiple Claude calls). The UI shows "Araştırılıyor…" spinner during loading. No timeout is set yet — add in Sprint 1.6 if needed.
+- **Niche page resets all reply states on each new "Tweet'leri Getir"** click — this is intentional to avoid stale data.
+- **Brave free tier has no time-range filter.** `hours` param is sent to backend but not forwarded to Brave.
+- **CORS is `allow_origins=["*"]`** — acceptable for Phase 1 local dev.
+- **No auth in Phase 1** — all endpoints are open.
+- **Twitter API not integrated** — all tweet discovery via Brave Search.
 
 ---
 
@@ -78,16 +72,12 @@ Build the Next.js UI that connects to the FastAPI backend already running on Rai
 ```bash
 # Backend
 cd backend
-python -m venv .venv
-.venv/Scripts/activate        # Windows
-pip install -r requirements.txt
-cp ../.env.example ../.env    # fill in keys
-.venv/Scripts/uvicorn main:app --reload
+.venv/Scripts/activate        # Windows (venv already created)
+uvicorn main:app --reload
 
 # Frontend
 cd frontend
-npm install
-cp .env.local.example .env.local   # fill in NEXT_PUBLIC_API_URL
+cp env.local.example .env.local   # fill in NEXT_PUBLIC_API_URL
 npm run dev
 
 # Tests
