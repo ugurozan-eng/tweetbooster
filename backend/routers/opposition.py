@@ -1,0 +1,163 @@
+"""
+TwitBoost — Opposition Router
+================================
+Exposes the full Opposition Mode pipeline as a single HTTP endpoint.
+
+Endpoint
+--------
+POST /api/opposition/analyze
+    Full pipeline: person_identifier → research_agent → analysis_agent
+    Body  : { tweet_text, tones (optional) }
+    Returns: AnalysisOutput (person, contradictions, replies, sources, status)
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+from services.analysis_agent import (
+    AnalysisAgentError,
+    AnalysisOutput,
+    ContradictionItem,
+    ReplyVariant,
+    run_analysis,
+)
+from services.person_identifier import PersonIdentifierError, identify_person
+from services.research_agent import run_research
+
+router = APIRouter(prefix="/api/opposition", tags=["opposition"])
+
+# ---------------------------------------------------------------------------
+# Request / Response schemas
+# ---------------------------------------------------------------------------
+
+_VALID_TONES = {"cold", "sharp", "thread"}
+
+
+class AnalyzeRequest(BaseModel):
+    tweet_text: str = Field(
+        ...,
+        min_length=1,
+        max_length=4000,
+        description="Raw tweet text pasted by the user.",
+    )
+    tones: list[str] = Field(
+        default=["cold", "sharp", "thread"],
+        description="Which reply tones to generate. Valid values: cold, sharp, thread.",
+    )
+
+
+class ContradictionResponse(BaseModel):
+    statement_a: str
+    statement_b: str
+    date_a: str | None
+    date_b: str | None
+    source_url: str
+    confidence: str
+    summary: str
+
+
+class ReplyVariantResponse(BaseModel):
+    tweet_text: str
+    thread: list[str]
+    evidence_note: str
+    disclaimer: str
+
+
+class AnalyzeResponse(BaseModel):
+    person_name: str
+    contradictions: list[ContradictionResponse]
+    replies: dict[str, ReplyVariantResponse | None]
+    total_sources: int
+    status: str
+
+
+# ---------------------------------------------------------------------------
+# Endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/analyze",
+    response_model=AnalyzeResponse,
+    summary="Full Opposition Mode pipeline",
+)
+async def analyze(body: AnalyzeRequest) -> AnalyzeResponse:
+    """
+    Run the complete Opposition Mode pipeline for a tweet.
+
+    Steps:
+    1. Identify the person in the tweet (Claude Sonnet).
+    2. Run 4 parallel Brave Search queries for that person.
+    3. Analyze contradictions between current tweet and research (Claude Sonnet).
+    4. Generate up to 3 reply variants (Claude Sonnet × tones requested).
+    5. Apply legal safety filter to each reply; blocked replies are returned as null.
+
+    Returns the contradiction map, all replies, and source list.
+    Returns ``status: "no_contradictions_found"`` when research yields no usable evidence.
+    """
+    # ── Validate tones ────────────────────────────────────────────────────
+    requested_tones = [t for t in body.tones if t in _VALID_TONES]
+    if not requested_tones:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Geçersiz ton değerleri. Geçerli değerler: {sorted(_VALID_TONES)}",
+        )
+
+    # ── Step 1: person identification ─────────────────────────────────────
+    try:
+        person = await identify_person(body.tweet_text)
+    except EnvironmentError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except (PersonIdentifierError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    if not person["name"]:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Kişi tespit edilemedi. "
+                "Lütfen tweet metninin kişiye ait açık bir isim veya kullanıcı adı içerdiğinden "
+                "emin olun."
+            ),
+        )
+
+    # ── Step 2: research ─────────────────────────────────────────────────
+    try:
+        research_results = await run_research(person["name"], person["topic"])
+    except EnvironmentError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Arama sırasında hata oluştu: {exc}",
+        )
+
+    # ── Steps 3-5: analysis + generation + filter ─────────────────────────
+    try:
+        result = await run_analysis(body.tweet_text, research_results, requested_tones)
+    except EnvironmentError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except AnalysisAgentError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Analiz sırasında beklenmedik hata: {exc}",
+        )
+
+    # ── Build response ────────────────────────────────────────────────────
+    replies_out: dict[str, ReplyVariantResponse | None] = {}
+    for tone, variant in result["replies"].items():
+        replies_out[tone] = (
+            ReplyVariantResponse(**variant) if variant is not None else None
+        )
+
+    return AnalyzeResponse(
+        person_name=result["person_name"],
+        contradictions=[ContradictionResponse(**c) for c in result["contradictions"]],
+        replies=replies_out,
+        total_sources=len(result["sources"]),
+        status=result["status"],
+    )
