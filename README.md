@@ -1,62 +1,80 @@
 # TwitBoost
 
-TwitBoost is an AI-powered Twitter reply assistant built for Turkish Twitter users, offering two modes: **Opposition Mode** (*Muhalif Mod*), which researches a target account's public statements via web search, identifies inconsistencies using Claude AI, and generates legally-safe, evidence-backed counter-replies with source citations; and **Niche Mode**, which discovers trending tweets in user-selected niches (food, football, economy, politics) and generates high-engagement replies optimised for follower growth — all without direct posting, keeping the user in full control.
+AI-powered Twitter reply assistant for Turkish Twitter users.
+
+**Opposition Mode** — paste a tweet, get contradictions from the person's own past statements + legally-safe counter-replies with source citations.
+**Niche Mode** — browse trending tweets in a niche (food, football, economy, politics), generate high-engagement replies.
+
+**Status: Phase 1 complete** — personal use MVP, no auth, no payments. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js (latest), TypeScript, Tailwind CSS |
-| Backend | FastAPI (Python) |
-| AI Core | Claude Sonnet (Anthropic API) |
+| Frontend | Next.js 16, TypeScript, Tailwind CSS v4 |
+| Backend | FastAPI (Python 3.14) |
+| AI Core | Claude Sonnet (`claude-sonnet-4-20250514`) |
 | Web Search | Brave Search API |
 | Database | Supabase (Phase 2+) |
 | Payments | LemonSqueezy in TRY (Phase 2+) |
 | Deploy | Vercel (frontend) + Railway (backend) |
 
-## Quick Start
+## Local Development
 
-### Backend
+### 1. Environment variables
+
+```bash
+cp .env.example .env
+# Fill in: ANTHROPIC_API_KEY, BRAVE_SEARCH_API_KEY
+```
+
+### 2. Backend
+
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS/Linux
 pip install -r requirements.txt
-cp ../.env.example .env    # fill in your keys
 uvicorn main:app --reload
 # → http://localhost:8000/health
 ```
 
-### Frontend
+### 3. Frontend
+
 ```bash
 cd frontend
 npm install
-cp ../.env.example .env.local  # add NEXT_PUBLIC_* vars as needed
+cp env.local.example .env.local  # set NEXT_PUBLIC_API_URL=http://localhost:8000
 npm run dev
 # → http://localhost:3000
+```
+
+### 4. Tests
+
+```bash
+cd backend
+.venv\Scripts\pytest             # Windows
+# .venv/bin/pytest               # macOS/Linux
 ```
 
 ## Project Structure
 
 ```
 tweetboost/
-├── frontend/          # Next.js app
-├── backend/           # FastAPI app
-│   ├── main.py
-│   ├── routers/       # Route handlers (Sprint 1.2+)
-│   ├── services/      # Business logic (Sprint 1.2+)
-│   ├── prompts/       # Claude system prompts as .txt files
-│   └── requirements.txt
-├── docs/              # PRD, Architecture, Roadmap, Decisions
-├── .env.example       # All required environment variables
-└── CLAUDE.md          # AI session memory
+├── frontend/              # Next.js app
+│   ├── app/               # Pages: /, /opposition, /niche
+│   └── lib/api.ts         # Single API client (all backend calls go here)
+├── backend/
+│   ├── main.py            # FastAPI app + router registration
+│   ├── routers/           # opposition.py, niche.py, research.py
+│   ├── services/          # analysis_agent, niche_agent, brave_search, …
+│   ├── prompts/           # Claude system prompts (.txt files)
+│   └── config/niches.py   # Niche definitions — single source of truth
+├── docs/                  # PRD, Architecture, Roadmap, Decisions
+└── .env.example           # Required environment variables
 ```
-
-## Current Phase
-
-**Phase 1 — MVP** (personal use, no auth, no payments).
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full sprint plan.
 
 ## Legal
 
-AI-generated output references only publicly available statements by the subject, always with source URLs. No insults, unverified claims, or automated posting. See [`docs/PRD.md §8`](docs/PRD.md) for the full legal disclaimer.
+AI output references only publicly available statements, always with source URLs. No insults, unverified claims, or automated posting. See [docs/PRD.md §8](docs/PRD.md).

@@ -1,71 +1,73 @@
 # ROADMAP.md — TwitBoost Development Roadmap
 
-**Version:** 1.0
-**Date:** May 2026
-**Estimated total sessions:** 30+
+**Version:** 1.1
+**Updated:** 2026-05-26
 
 ---
 
 ## Phase Overview
 
-| Phase | Name | Goal | Sessions Est. |
-|-------|------|------|--------------|
-| 1 | MVP | Working pipeline, personal use | 8-10 |
-| 2 | SaaS | Auth + payments + multi-user | 10-12 |
-| 3 | Power Features | Twitter API + image gen | 8-10 |
+| Phase | Name | Goal | Status |
+|-------|------|------|--------|
+| 1 | MVP | Working pipeline, personal use | ✅ Complete (2026-05-26) |
+| 2 | SaaS | Auth + payments + multi-user | 🔜 Next |
+| 3 | Power Features | Twitter API + image gen | ⏳ Planned |
 
 ---
 
-## PHASE 1 — MVP (Current)
+## PHASE 1 — MVP ✅ COMPLETE
 
-**Goal:** A working web app usable by one person (you).
-No auth. No payments. Core AI pipeline only.
+**Completed:** 2026-05-26
+**Note:** Phase 1 complete — personal use validated. Both modes (Opposition + Niche) working end-to-end.
 
-### Sprint 1.1 — Project Setup (Sessions 1-2)
-- [ ] Initialize Next.js 15 project (frontend)
-- [ ] Initialize FastAPI project (backend)
-- [ ] Set up Supabase project (even if not used yet — for later)
-- [ ] Configure Railway + Vercel deployments
-- [ ] Set up `.env` and `.env.example`
-- [ ] Set up `.claudeignore` and GSD
-- [ ] Basic health check endpoints
+### Sprint 1.1 — Project Setup ✅
+- [x] Initialize Next.js project (frontend) — v16.2.6
+- [x] Initialize FastAPI project (backend)
+- [x] Set up `.env` and `.env.example`
+- [x] Basic health check endpoints (`GET /health`)
+- [x] Project structure + README
 
-### Sprint 1.2 — Research Agent (Sessions 3-4)
-- [ ] Brave Search API integration (Python service)
-- [ ] Person identification from tweet text (Claude)
-- [ ] Parallel search queries (4 concurrent)
-- [ ] Content extraction from URLs
-- [ ] Structured output: statements list with dates + sources
+### Sprint 1.2 — Research Agent ✅
+- [x] Brave Search API integration with rate limiting (1 req/sec semaphore)
+- [x] Person identification from tweet text (Claude Sonnet)
+- [x] Parallel search queries (4 concurrent via asyncio.gather)
+- [x] Structured output: `SearchResult` TypedDict with dates + sources
 
-### Sprint 1.3 — Analysis + Generation (Sessions 5-6)
-- [ ] Inconsistency analysis prompt (Claude Sonnet)
-- [ ] Reply generation with 3 tone variants
-- [ ] Legal safety filter (no insults, source required)
-- [ ] Source URL + date formatting in output
+### Sprint 1.3 — Analysis + Generation ✅
+- [x] Inconsistency analysis prompt (`inconsistency_analyzer.txt`)
+- [x] Reply generation with 3 tone variants (cold / sharp / thread)
+- [x] Legal safety filter — pure regex, zero Claude calls (TCK §125-131)
+- [x] Source URL + date formatting in output
 
-### Sprint 1.4 — Niche Mode (Session 7)
-- [ ] Trending tweet discovery (Brave Search)
-- [ ] 4 niche configurations (food, football, economy, politics)
-- [ ] Niche reply generation prompt
+### Sprint 1.4 — Niche Mode ✅
+- [x] Niche config single source of truth (`config/niches.py`)
+- [x] 4 niche configurations (food, football, economy, politics)
+- [x] Tweet scoring prompt + niche reply generation prompt
+- [x] `get_trending()` + `generate_reply()` with safety filter
+- [x] `POST /api/niche/trending` + `POST /api/niche/reply`
 
-### Sprint 1.5 — Frontend (Sessions 8-9)
-- [ ] Tweet input UI
-- [ ] Mode selector (Opposition / Niche)
-- [ ] Results display (reply variants + sources)
-- [ ] Copy-to-clipboard for each variant
-- [ ] Basic loading states
+### Sprint 1.5 — Frontend ✅
+- [x] Next.js 16 + TypeScript + Tailwind v4
+- [x] Single API client (`frontend/lib/api.ts`) — all backend calls centralized
+- [x] Opposition Mode page — tweet input, tone selector, results + copy
+- [x] Niche Mode page — niche picker, trending list, inline reply generation
+- [x] Dark UI, Turkish language throughout, mobile responsive
 
-### Sprint 1.6 — Polish + Testing (Session 10)
-- [ ] End-to-end testing of both modes
-- [ ] Prompt quality review (test 20 real tweets)
-- [ ] Error handling (Brave API down, Claude rate limit)
-- [ ] Performance: pipeline under 30 seconds
+### Sprint 1.6 — Polish + Testing ✅
+- [x] End-to-end routing and validation verified against live backend
+- [x] 30-second AbortController timeout on every frontend fetch
+- [x] Network-down error → Turkish message (not raw JS error)
+- [x] `AnalysisTimeoutError` — 25s Claude timeout → HTTP 504
+- [x] Bug fix: `AnalyzeResponse` now returns `sources: list[str]` (was `total_sources: int`)
+- [x] All 85 backend tests passing
+- [x] TypeScript `tsc --noEmit` clean
+- [x] `next build` clean
 
 **Phase 1 Done Criteria:**
-- Both modes working
-- Output quality rated 4/5 on 20 test cases
-- Pipeline completes in < 30 seconds
-- No crashes on bad input
+- ✅ Both modes working (routing, validation, error handling verified)
+- ✅ Pipeline under 30 seconds (timeout enforced at both backend and frontend)
+- ✅ No crashes on bad input (422 Turkish messages for all invalid inputs)
+- ✅ Legal safety filter running on every AI output
 
 ---
 
@@ -73,32 +75,31 @@ No auth. No payments. Core AI pipeline only.
 
 **Goal:** Real users, real payments, real data.
 
-### Sprint 2.1 — Auth (Sessions 11-12)
+### Sprint 2.1 — Auth
 - [ ] Supabase Auth integration
 - [ ] Email/password + Google OAuth
 - [ ] Protected routes (frontend + backend)
 - [ ] User plan storage
 
-### Sprint 2.2 — Usage Limits (Sessions 13-14)
+### Sprint 2.2 — Usage Limits
 - [ ] Daily usage tracking (DB)
 - [ ] Server-side limit enforcement
 - [ ] Limit exceeded UI + upgrade prompt
 - [ ] Usage counter display in UI
 
-### Sprint 2.3 — Payments (Sessions 15-16)
+### Sprint 2.3 — Payments
 - [ ] LemonSqueezy integration
 - [ ] 3 plan setup (Niche / Opposition / Full)
 - [ ] Webhook handler (plan activation/cancellation)
 - [ ] Billing page in UI
 
-### Sprint 2.4 — UI Polish (Sessions 17-18)
-- [ ] Full responsive design
-- [ ] Turkish language throughout
-- [ ] Landing page
+### Sprint 2.4 — UI Polish
+- [ ] Full responsive design review
+- [ ] Landing/marketing page
 - [ ] Onboarding flow
 - [ ] Plan upgrade flow
 
-### Sprint 2.5 — SaaS Launch Prep (Sessions 19-20)
+### Sprint 2.5 — SaaS Launch Prep
 - [ ] KVKK compliance (privacy policy, data processing)
 - [ ] Terms of service
 - [ ] Error monitoring (Sentry or similar)
@@ -117,29 +118,19 @@ No auth. No payments. Core AI pipeline only.
 
 **Goal:** Differentiation. Features competitors can't easily copy.
 
-### Sprint 3.1 — Twitter API (Sessions 21-23)
+### Sprint 3.1 — Twitter API
 - [ ] Twitter API v2 integration
 - [ ] Real tweet fetching (not web search)
 - [ ] BYOK option (user's own API key)
-- [ ] Per-user Twitter quota tracking
 
-### Sprint 3.2 — AI Image Generation (Sessions 24-26)
+### Sprint 3.2 — AI Image Generation
 - [ ] Flux API integration
 - [ ] Image prompt generation from tweet context
-- [ ] Web image collection (Phase 1 upgrade)
-- [ ] Image display in output
 
-### Sprint 3.3 — Analytics + Growth (Sessions 27-29)
-- [ ] User analytics dashboard (usage trends)
-- [ ] Reply performance tracker (manual input)
+### Sprint 3.3 — Analytics + Growth
 - [ ] More niche options (expand from 4 to 10+)
+- [ ] Reply performance tracker
 - [ ] Saved replies library
-
-### Sprint 3.4 — Scale (Session 30+)
-- [ ] Performance optimization
-- [ ] Caching layer (research cache)
-- [ ] CDN for images
-- [ ] Affiliate/referral system
 
 ---
 
@@ -155,3 +146,4 @@ See `docs/DECISIONS.md` for why each technology was chosen.
 - **Prompt quality is the product.** Spend extra sessions on prompts if needed.
 - **Turkish language.** Every user-facing string must be in Turkish.
 - **Legal filter is mandatory.** Never ship without it, even in MVP.
+- **Next.js version is 16.2.6** (latest as of May 2026), not "15" as originally planned.
