@@ -83,6 +83,10 @@ class AnalysisAgentError(Exception):
     """Raised when a Claude API call in the analysis pipeline fails."""
 
 
+class AnalysisTimeoutError(AnalysisAgentError):
+    """Raised when a Claude API call exceeds the 25-second timeout threshold."""
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -200,12 +204,20 @@ async def _analyze_inconsistencies(
     )
 
     try:
-        message = await client.messages.create(
-            model=_MODEL,
-            max_tokens=_ANALYSIS_MAX_TOKENS,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_msg}],
+        message = await asyncio.wait_for(
+            client.messages.create(
+                model=_MODEL,
+                max_tokens=_ANALYSIS_MAX_TOKENS,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_msg}],
+            ),
+            timeout=25.0,
         )
+    except asyncio.TimeoutError as exc:
+        raise AnalysisTimeoutError(
+            "Claude analiz çağrısı zaman aşımına uğradı (25 saniye). "
+            "Lütfen daha sonra tekrar deneyin."
+        ) from exc
     except anthropic.APIError as exc:
         raise AnalysisAgentError(
             f"Claude API error in inconsistency analysis: {exc}"

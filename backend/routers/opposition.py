@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from services.analysis_agent import (
     AnalysisAgentError,
     AnalysisOutput,
+    AnalysisTimeoutError,
     ContradictionItem,
     ReplyVariant,
     run_analysis,
@@ -69,7 +70,7 @@ class AnalyzeResponse(BaseModel):
     person_name: str
     contradictions: list[ContradictionResponse]
     replies: dict[str, ReplyVariantResponse | None]
-    total_sources: int
+    sources: list[str]   # source URLs for display in the UI
     status: str
 
 
@@ -139,6 +140,8 @@ async def analyze(body: AnalyzeRequest) -> AnalyzeResponse:
         result = await run_analysis(body.tweet_text, research_results, requested_tones)
     except EnvironmentError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    except AnalysisTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc))
     except AnalysisAgentError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     except Exception as exc:
@@ -154,10 +157,19 @@ async def analyze(body: AnalyzeRequest) -> AnalyzeResponse:
             ReplyVariantResponse(**variant) if variant is not None else None
         )
 
+    # Collect unique source URLs for the UI to display as clickable links.
+    source_urls: list[str] = []
+    seen: set[str] = set()
+    for r in result["sources"]:
+        url = str(r.get("url", "")).strip()
+        if url and url not in seen:
+            seen.add(url)
+            source_urls.append(url)
+
     return AnalyzeResponse(
         person_name=result["person_name"],
         contradictions=[ContradictionResponse(**c) for c in result["contradictions"]],
         replies=replies_out,
-        total_sources=len(result["sources"]),
+        sources=source_urls,
         status=result["status"],
     )

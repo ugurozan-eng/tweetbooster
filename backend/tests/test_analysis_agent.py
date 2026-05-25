@@ -10,11 +10,13 @@ Coverage
 - Partial tone failure: one Claude API call raises → that tone is None
 - Missing ANTHROPIC_API_KEY → EnvironmentError raised before any Claude call
 - Missing prompt file → AnalysisAgentError (propagated from stage 2)
+- Analysis Claude call times out → AnalysisTimeoutError raised
 - Helper functions: _format_sources_for_analysis, _parse_json_response
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call
@@ -25,6 +27,7 @@ import pytest
 import services.analysis_agent as aa
 from services.analysis_agent import (
     AnalysisAgentError,
+    AnalysisTimeoutError,
     _format_sources_for_analysis,
     _normalise_confidence,
     _parse_json_response,
@@ -371,3 +374,27 @@ async def test_run_analysis_single_tone(monkeypatch: pytest.MonkeyPatch) -> None
     assert result["replies"]["sharp"] is None
     assert result["replies"]["thread"] is None
     assert mock_client.messages.create.await_count == 2
+
+
+# ---------------------------------------------------------------------------
+# run_analysis — Claude analysis call times out
+# ---------------------------------------------------------------------------
+
+
+async def test_run_analysis_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """asyncio.TimeoutError during the analysis Claude call → AnalysisTimeoutError."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    # Make the analysis Claude call raise TimeoutError (simulates asyncio.wait_for timeout)
+    messages_mock = MagicMock()
+    messages_mock.create = AsyncMock(side_effect=asyncio.TimeoutError())
+    mock_client = MagicMock()
+    mock_client.messages = messages_mock
+
+    monkeypatch.setattr(
+        "services.analysis_agent.anthropic.AsyncAnthropic",
+        lambda **kwargs: mock_client,
+    )
+
+    with pytest.raises(AnalysisTimeoutError, match="zaman aşımına uğradı"):
+        await run_analysis("Test tweet.", _SAMPLE_SOURCES)  # type: ignore[arg-type]
