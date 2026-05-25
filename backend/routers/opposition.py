@@ -13,9 +13,10 @@ POST /api/opposition/analyze
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from middleware.auth_middleware import UserClaims, get_current_user
 from services.analysis_agent import (
     AnalysisAgentError,
     AnalysisOutput,
@@ -25,6 +26,7 @@ from services.analysis_agent import (
     run_analysis,
 )
 from services.person_identifier import PersonIdentifierError, identify_person
+from services.plan_checker import check_daily_limit, check_permission, log_usage
 from services.research_agent import run_research
 
 router = APIRouter(prefix="/api/opposition", tags=["opposition"])
@@ -84,20 +86,30 @@ class AnalyzeResponse(BaseModel):
     response_model=AnalyzeResponse,
     summary="Full Opposition Mode pipeline",
 )
-async def analyze(body: AnalyzeRequest) -> AnalyzeResponse:
+async def analyze(
+    body: AnalyzeRequest,
+    user: UserClaims = Depends(get_current_user),
+) -> AnalyzeResponse:
     """
     Run the complete Opposition Mode pipeline for a tweet.
 
     Steps:
-    1. Identify the person in the tweet (Claude Sonnet).
-    2. Run 4 parallel Brave Search queries for that person.
-    3. Analyze contradictions between current tweet and research (Claude Sonnet).
-    4. Generate up to 3 reply variants (Claude Sonnet × tones requested).
-    5. Apply legal safety filter to each reply; blocked replies are returned as null.
+    1. Verify user plan allows opposition mode.
+    2. Check daily request limit (UTC+3 reset).
+    3. Identify the person in the tweet (Claude Sonnet).
+    4. Run 4 parallel Brave Search queries for that person.
+    5. Analyze contradictions between current tweet and research (Claude Sonnet).
+    6. Generate up to 3 reply variants (Claude Sonnet × tones requested).
+    7. Apply legal safety filter to each reply; blocked replies are returned as null.
+    8. Log the request to usage_logs.
 
     Returns the contradiction map, all replies, and source list.
     Returns ``status: "no_contradictions_found"`` when research yields no usable evidence.
     """
+    # ── Auth: plan permission + daily limit ───────────────────────────────
+    check_permission(user["user_id"], user["plan"], "opposition")
+    await check_daily_limit(user["user_id"], user["plan"], "opposition")
+
     # ── Validate tones ────────────────────────────────────────────────────
     requested_tones = [t for t in body.tones if t in _VALID_TONES]
     if not requested_tones:
@@ -165,6 +177,9 @@ async def analyze(body: AnalyzeRequest) -> AnalyzeResponse:
         if url and url not in seen:
             seen.add(url)
             source_urls.append(url)
+
+    # ── Log usage (non-fatal if DB is down) ──────────────────────────────
+    await log_usage(user["user_id"], "opposition")
 
     return AnalyzeResponse(
         person_name=result["person_name"],

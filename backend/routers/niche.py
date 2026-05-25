@@ -10,10 +10,11 @@ All error messages to the client are in Turkish.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from config.niches import VALID_NICHE_IDS
+from middleware.auth_middleware import UserClaims, get_current_user
 from services.niche_agent import (
     NicheAgentError,
     NicheReplyBlockedError,
@@ -22,6 +23,7 @@ from services.niche_agent import (
     generate_reply,
     get_trending,
 )
+from services.plan_checker import check_daily_limit, check_permission, log_usage
 
 router = APIRouter(prefix="/api/niche", tags=["niche"])
 
@@ -87,7 +89,10 @@ def _validate_niche_id(niche_id: str) -> None:
 
 
 @router.post("/trending", response_model=TrendingResponse)
-async def trending(body: TrendingRequest) -> TrendingResponse:
+async def trending(
+    body: TrendingRequest,
+    user: UserClaims = Depends(get_current_user),
+) -> TrendingResponse:
     """
     Fetch trending tweet candidates for the given niche, score them with
     Claude, and return them ranked by engagement potential.
@@ -100,6 +105,9 @@ async def trending(body: TrendingRequest) -> TrendingResponse:
     """
     _validate_niche_id(body.niche_id)
 
+    check_permission(user["user_id"], user["plan"], "niche")
+    await check_daily_limit(user["user_id"], user["plan"], "niche")
+
     try:
         scored = await get_trending(body.niche_id, hours=body.hours)
     except EnvironmentError as exc:
@@ -107,11 +115,15 @@ async def trending(body: TrendingRequest) -> TrendingResponse:
     except NicheAgentError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
+    await log_usage(user["user_id"], "niche")
     return TrendingResponse(niche_id=body.niche_id, tweets=scored)
 
 
 @router.post("/reply", response_model=ReplyResponse)
-async def reply(body: ReplyRequest) -> ReplyResponse:
+async def reply(
+    body: ReplyRequest,
+    user: UserClaims = Depends(get_current_user),
+) -> ReplyResponse:
     """
     Generate up to three legally-safe Turkish engagement replies for the
     provided tweet text within the given niche context.
@@ -122,6 +134,11 @@ async def reply(body: ReplyRequest) -> ReplyResponse:
     - Returns HTTP 422 if ``niche_id`` is not recognised.
     """
     _validate_niche_id(body.niche_id)
+
+    # Note: /niche/reply shares the niche daily limit with /niche/trending.
+    # Each call to either endpoint counts toward the same daily total.
+    check_permission(user["user_id"], user["plan"], "niche")
+    await check_daily_limit(user["user_id"], user["plan"], "niche")
 
     try:
         replies = await generate_reply(body.tweet_text, body.niche_id)
@@ -135,4 +152,5 @@ async def reply(body: ReplyRequest) -> ReplyResponse:
     except NicheAgentError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
+    await log_usage(user["user_id"], "niche")
     return ReplyResponse(niche_id=body.niche_id, replies=replies)
