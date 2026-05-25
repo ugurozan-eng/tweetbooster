@@ -5,6 +5,9 @@
  * Never import fetch or call NEXT_PUBLIC_API_URL directly from components.
  *
  * Base URL: process.env.NEXT_PUBLIC_API_URL (falls back to localhost:8000)
+ *
+ * Auth: Every request attaches the Supabase Bearer token from the current session.
+ * The FastAPI backend validates the JWT on every protected endpoint.
  */
 
 // ---------------------------------------------------------------------------
@@ -102,10 +105,23 @@ async function apiFetch<T>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
+  // Attach Bearer token from the current Supabase session.
+  // Dynamic import keeps this tree-shakeable for SSR paths where supabase isn't set up.
+  let authHeader: Record<string, string> = {};
+  try {
+    const { getAccessToken } = await import("@/lib/supabase");
+    const token = await getAccessToken();
+    if (token) {
+      authHeader = { Authorization: `Bearer ${token}` };
+    }
+  } catch {
+    // Supabase not configured (dev without keys) — proceed without auth header
+  }
+
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeader },
       body: JSON.stringify(body),
       signal: controller.signal,
     });

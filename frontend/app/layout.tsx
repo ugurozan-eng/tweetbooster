@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import AuthHeader from "@/components/AuthHeader";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,21 +42,24 @@ export default function RootLayout({
               TwitBoost
             </Link>
 
-            {/* Nav links */}
-            <nav className="flex items-center gap-1">
-              <Link
-                href="/opposition"
-                className="px-3 py-1.5 rounded-md text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
-              >
-                Muhalif Mod
-              </Link>
-              <Link
-                href="/niche"
-                className="px-3 py-1.5 rounded-md text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
-              >
-                Niş Mod
-              </Link>
-            </nav>
+            {/* Nav links + auth */}
+            <div className="flex items-center gap-1">
+              <nav className="flex items-center gap-1 mr-2">
+                <Link
+                  href="/opposition"
+                  className="px-3 py-1.5 rounded-md text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                >
+                  Muhalif Mod
+                </Link>
+                <Link
+                  href="/niche"
+                  className="px-3 py-1.5 rounded-md text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                >
+                  Niş Mod
+                </Link>
+              </nav>
+              <AuthHeader />
+            </div>
           </div>
         </header>
 
@@ -64,7 +68,7 @@ export default function RootLayout({
 
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <footer className="border-t border-zinc-800 py-4 text-center text-xs text-zinc-600">
-          TwitBoost — Faz 1 MVP
+          TwitBoost — Faz 2
         </footer>
       </body>
     </html>
