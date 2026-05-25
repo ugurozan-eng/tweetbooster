@@ -6,91 +6,73 @@
 
 ## Last Completed Sprint
 
-**Sprint 1.6 — Polish & Testing**
-**Commit:** `6ea238e`
+**Sprint 2.1 — Auth**
+**Commit:** `8c6786a`
 **Date:** 2026-05-26
 
-### ✅ Phase 1 is now COMPLETE
+### ✅ Sprint 2.1 is now COMPLETE
 
-Both modes (Opposition + Niche) work end-to-end. 85 tests passing. Clean build.
+Full auth layer implemented. 115 tests passing. Clean build.
 
 ### What was done this sprint
 
 | Area | Change |
 |------|--------|
-| **Bug fix** | `AnalyzeResponse.total_sources: int` → `sources: list[str]` — backend now returns actual source URLs so the UI's "Sources" section renders clickable links |
-| **Error handling** | `AnalysisTimeoutError(AnalysisAgentError)` added; analysis Claude call wrapped in `asyncio.wait_for(timeout=25.0)`; HTTP 504 on timeout |
-| **Frontend** | 30s `AbortController` timeout on every `fetch`; `AbortError` → Turkish "zaman aşımına uğradı"; `TypeError` (network down) → Turkish "sunucuya bağlanılamadı" |
-| **E2E validation** | Backend started fresh; all 5 validation scenarios confirmed (422 Turkish messages, 503/500 for missing keys, health check) |
-| **Docs** | ROADMAP.md: all Sprint 1.x marked [x], Phase 1 completion date added |
-| **Docs** | README.md: fixed frontend env setup (env.local.example), added full local dev guide |
-| **Docs** | CLAUDE.md: fixed Next.js version (16.2.6), added Phase 1 complete status, cleaned formatting |
-
-### E2E Test Results (2026-05-26)
-
-**Environment:** Backend running on localhost:8000, no API keys loaded
-**Coverage:** Routing, validation, error messages — full pipeline not tested (requires ANTHROPIC_API_KEY + BRAVE_SEARCH_API_KEY)
-
-| Scenario | Result |
-|----------|--------|
-| `GET /health` | ✅ `{"status":"ok","version":"0.1.0"}` |
-| Missing `tweet_text` → 422 | ✅ FastAPI validation error |
-| Empty tones → 422 Turkish | ✅ "Geçersiz ton değerleri. Geçerli değerler: ['cold','sharp','thread']" |
-| Invalid `niche_id` → 422 Turkish | ✅ "Geçersiz niş kimliği: 'invalid'. Geçerli değerler: economy, food, football, politics" |
-| Valid niche, no env key → 500 Turkish | ✅ "ANTHROPIC_API_KEY ortam değişkeni tanımlı değil." |
-| `AnalyzeResponse` schema | ✅ `sources: list[str]` confirmed in OpenAPI schema |
-
-**Full pipeline test** (opposition + niche with real tweets) requires:
-- `ANTHROPIC_API_KEY` — Anthropic Console
-- `BRAVE_SEARCH_API_KEY` — Brave Search API
-Run after filling `.env` from `.env.example`.
-
-### Bugs found and fixed
-
-1. **`AnalyzeResponse.total_sources: int` mismatch** — backend sent a count, frontend expected a URL list → the "Sources" section in the UI would crash at runtime. Fixed by replacing with `sources: list[str]`.
-2. **No timeout on Claude analysis calls** — unconstrained Claude calls could hang indefinitely. Fixed with `asyncio.wait_for(timeout=25.0)`.
-3. **No timeout on frontend fetch** — network failures produced raw JS `TypeError` messages. Fixed with `AbortController` + Turkish error messages.
+| **Backend deps** | `requirements.txt`: added supabase==2.15.1, python-jose[cryptography]==3.3.0, passlib==1.7.4, tzdata==2026.2 |
+| **Env vars** | `.env.example`: added `SUPABASE_JWT_SECRET`; `frontend/env.local.example`: added `NEXT_PUBLIC_SUPABASE_URL/ANON_KEY` |
+| **DB schema** | `migrations/001_initial_auth.sql`: `users`, `usage_logs` tables + `daily_usage` view + RLS policies |
+| **Supabase client** | `services/supabase_client.py`: `lru_cache` singletons for anon + service role clients |
+| **Auth service** | `services/auth_service.py`: `verify_jwt()`, `get_user_plan()`, `create_user_if_not_exists()` |
+| **Auth middleware** | `middleware/auth_middleware.py`: `get_current_user` FastAPI dependency, HTTP 401 Turkish |
+| **Plan checker** | `services/plan_checker.py`: `check_permission()` (sync), `check_daily_limit()` (async), `log_usage()` |
+| **Router updates** | `opposition.py` + `niche.py`: `Depends(get_current_user)` + permission + limit check + usage log |
+| **Auth router** | `routers/auth.py`: `POST /api/auth/me` → user_id, email, plan, usage_today |
+| **Frontend lib** | `lib/supabase.ts`: singleton client + cookie helpers + `getAccessToken()` |
+| **Login page** | `app/login/page.tsx`: email+password form + Google OAuth + Turkish error messages |
+| **OAuth callback** | `app/auth/callback/route.ts`: code exchange, sets `twitboost-authed` cookie |
+| **Route protection** | `proxy.ts` (Next.js 16): protects `/opposition` and `/niche` routes |
+| **API client** | `lib/api.ts`: dynamic import `getAccessToken()`, attaches `Authorization: Bearer` |
+| **Auth header** | `components/AuthHeader.tsx`: client component, shows email + logout button |
+| **Layout** | `app/layout.tsx`: AuthHeader in nav, updated footer to Faz 2 |
+| **Tests** | `test_auth_service.py` (9 tests) + `test_plan_checker.py` (21 tests) |
 
 ### Test count
-**85 / 85 passing** (was 84 at end of Sprint 1.5)
+**115 / 115 passing** (was 85 at end of Sprint 1.6)
 
-New test: `test_run_analysis_timeout` in `test_analysis_agent.py`
+New tests: 30 total (9 auth_service + 21 plan_checker)
+
+### Architecture decisions made
+
+1. **JWT verification**: HS256 with `SUPABASE_JWT_SECRET` via `python-jose` — standard Supabase JWT flow
+2. **Route protection**: `proxy.ts` (renamed from `middleware.ts` in Next.js 16) with presence cookie only (no JWT verification at edge)
+3. **Daily limit reset**: midnight `Europe/Istanbul` (UTC+3) via `ZoneInfo` — matches PRD §4
+4. **Usage logging**: server-side only (`log_usage` called after success, never trusted from frontend)
+5. **Plan defaults**: users not in DB → `trial` plan (3 req/day, both modes)
+6. **First-login upsert**: `POST /api/auth/me` calls `create_user_if_not_exists` — frontend calls this after every sign-in
+
+### Blockers / Notes for Sprint 2.2
+
+- **Migration not applied yet**: `migrations/001_initial_auth.sql` needs to be run in Supabase SQL Editor before Sprint 2.2 can be tested
+- **Supabase project needed**: create a Supabase project and fill in all 4 env vars (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`)
+- **Google OAuth**: requires Supabase project to have Google OAuth provider configured
+- **CORS still `allow_origins=["*"]`**: restrict to Vercel domain before public deploy
+- **`tzdata==2026.2`**: Windows-only requirement; Linux/Mac can omit (built-in IANA db)
+- **Supabase `gotrue` deprecation warning**: `supabase==2.15.1` uses deprecated gotrue package — not a blocker but worth noting
+- **Full E2E test**: requires all 4 Supabase env vars + real API keys + migration applied
 
 ---
 
 ## Next Sprint
 
-**Sprint 2.1 — Auth (Phase 2 begins)**
+**Sprint 2.2 — Usage Limits**
 
-Phase 2 starts fresh. Do NOT start before re-reading `docs/PRD.md §4` and `docs/ARCHITECTURE.md §3`.
+Before coding, confirm migration 001 is applied in Supabase.
 
-Key Phase 2 decisions to make before coding:
-1. **Supabase Auth** — email/password + Google OAuth
-2. **Row-level security** — each user sees only their own usage data
-3. **Plan storage** — which Supabase table stores user plan (free/niche/opposition/full)
-4. **Backend auth middleware** — JWT validation on protected routes
-
-**Before Sprint 2.1:**
-- [ ] Read docs/PRD.md §4 (Auth requirements)
-- [ ] Read docs/ARCHITECTURE.md §3 (Phase 2 architecture)
-- [ ] Create Supabase project (if not done)
-- [ ] Decide: middleware-based auth or dependency injection per route
-
-**Skills to load for Phase 2:**
-- `gsd-setup` — phase transition
-- `frontend-backend` — auth connection
-- `llm-council` — JWT strategy decision
-
----
-
-## Active Blockers / Notes
-
-- **Full E2E test needs real API keys** — fill `.env` from `.env.example` then run both services and manually test the full pipeline.
-- **CORS `allow_origins=["*"]`** — must be restricted to Vercel domain before Phase 2 public deploy.
-- **Next.js version is 16.2.6** — docs/PRD.md still says "15"; update PRD before Phase 2.
-- **Brave free tier has no time-range filter** — `hours` param sent to backend but not forwarded.
-- **`env.local.example`** (no leading dot) — rename to `.env.local` when setting up locally.
-- **Legal filter word list** — will need expansion before public launch.
+Tasks:
+1. `GET /api/usage/me` — daily usage details (current count + limit + reset time)
+2. UI: usage counter in header (e.g. "3/20 kullanım")
+3. Test: verify 429 fires correctly at the limit boundary
+4. Test the full auth + limit flow with real Supabase project
 
 ---
 
@@ -100,13 +82,14 @@ Key Phase 2 decisions to make before coding:
 # Backend
 cd backend
 .venv\Scripts\activate        # Windows (venv already exists)
-# Fill in .env from .env.example (ANTHROPIC_API_KEY + BRAVE_SEARCH_API_KEY)
+# Fill in .env from .env.example (ALL keys including Supabase)
+# Apply migrations/001_initial_auth.sql in Supabase SQL Editor
 uvicorn main:app --reload
 
 # Frontend
 cd frontend
 cp env.local.example .env.local
-# Set NEXT_PUBLIC_API_URL=http://localhost:8000
+# Fill in: NEXT_PUBLIC_API_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
 npm run dev
 
 # Tests
@@ -118,13 +101,27 @@ cd backend
 
 ## API Reference (quick)
 
-| Method | Path | Body |
-|--------|------|------|
-| GET | `/health` | — |
-| POST | `/api/research/identify` | `{tweet_text}` |
-| POST | `/api/research/run` | `{name, topic}` |
-| POST | `/api/opposition/analyze` | `{tweet_text, tones?}` |
-| POST | `/api/niche/trending` | `{niche_id, hours?}` |
-| POST | `/api/niche/reply` | `{tweet_text, niche_id}` |
+| Method | Path | Auth required | Body |
+|--------|------|---------------|------|
+| GET | `/health` | No | — |
+| POST | `/api/auth/me` | Yes (JWT) | — |
+| POST | `/api/research/identify` | No | `{tweet_text}` |
+| POST | `/api/research/run` | No | `{name, topic}` |
+| POST | `/api/opposition/analyze` | Yes (JWT) | `{tweet_text, tones?}` |
+| POST | `/api/niche/trending` | Yes (JWT) | `{niche_id, hours?}` |
+| POST | `/api/niche/reply` | Yes (JWT) | `{tweet_text, niche_id}` |
 
 Full contracts: `docs/API_CONTRACTS.md`
+
+---
+
+## Plan Limits (from docs/PRD.md §4)
+
+| Plan | Daily limit | Modes | Price |
+|------|------------|-------|-------|
+| trial | 3 | both | free |
+| niche | 20 | niche only | 54.99 TL/mo |
+| opposition | 15 | opposition only | 109.99 TL/mo |
+| full | 30 | both | 149.99 TL/mo |
+
+Reset: midnight Istanbul time (UTC+3 / `Europe/Istanbul`)

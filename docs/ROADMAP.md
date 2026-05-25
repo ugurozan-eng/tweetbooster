@@ -75,11 +75,15 @@
 
 **Goal:** Real users, real payments, real data.
 
-### Sprint 2.1 — Auth
-- [ ] Supabase Auth integration
-- [ ] Email/password + Google OAuth
-- [ ] Protected routes (frontend + backend)
-- [ ] User plan storage
+### Sprint 2.1 — Auth ✅
+- [x] Supabase Auth integration (supabase_client.py singleton)
+- [x] Email/password + Google OAuth (login/page.tsx + auth/callback/route.ts)
+- [x] Protected routes — proxy.ts (frontend) + get_current_user dependency (backend)
+- [x] User plan storage (users table + daily_usage view in migrations/001)
+- [x] JWT verification with python-jose (auth_service.py)
+- [x] Plan permission + daily limit enforcement (plan_checker.py)
+- [x] Usage logging server-side (log_usage in plan_checker.py)
+- [x] POST /api/auth/me — user info + plan + today's usage
 
 ### Sprint 2.2 — Usage Limits
 - [ ] Daily usage tracking (DB)
