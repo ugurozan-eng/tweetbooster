@@ -92,36 +92,67 @@ export class ApiError extends Error {
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** Timeout applied to every backend request (milliseconds). */
+const FETCH_TIMEOUT_MS = 30_000;
+
 async function apiFetch<T>(
   path: string,
   body: Record<string, unknown>
 ): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-  if (!res.ok) {
-    let detail = `İstek başarısız oldu (HTTP ${res.status})`;
-    try {
-      const json: unknown = await res.json();
-      if (
-        typeof json === "object" &&
-        json !== null &&
-        "detail" in json &&
-        typeof (json as { detail: unknown }).detail === "string"
-      ) {
-        detail = (json as { detail: string }).detail;
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      let detail = `İstek başarısız oldu (HTTP ${res.status})`;
+      try {
+        const json: unknown = await res.json();
+        if (
+          typeof json === "object" &&
+          json !== null &&
+          "detail" in json &&
+          typeof (json as { detail: unknown }).detail === "string"
+        ) {
+          detail = (json as { detail: string }).detail;
+        }
+      } catch {
+        // Use default message
       }
-    } catch {
-      // Use default message
+      throw new ApiError(detail, res.status);
     }
-    throw new ApiError(detail, res.status);
-  }
 
-  const data: unknown = await res.json();
-  return data as T;
+    const data: unknown = await res.json();
+    return data as T;
+  } catch (err) {
+    if (err instanceof ApiError) {
+      // Re-throw typed API errors unchanged
+      throw err;
+    }
+    if (err instanceof Error) {
+      if (err.name === "AbortError") {
+        throw new ApiError(
+          `İstek zaman aşımına uğradı (${FETCH_TIMEOUT_MS / 1000} saniye). ` +
+            "Lütfen tekrar deneyin.",
+          408
+        );
+      }
+      // TypeError: network failure — server down, DNS failure, CORS, etc.
+      throw new ApiError(
+        "Sunucuya bağlanılamadı. Backend servisinin çalıştığından emin olun.",
+        0
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // ---------------------------------------------------------------------------
