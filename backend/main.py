@@ -27,9 +27,11 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# Routers — added as each sprint delivers them
+# Routers
 # ---------------------------------------------------------------------------
-# from routers import opposition, niche   # uncomment in Sprint 1.2+
+from routers.research import router as research_router  # Sprint 1.2
+
+app.include_router(research_router)
 
 
 # ---------------------------------------------------------------------------
