@@ -31,9 +31,11 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 from routers.research import router as research_router      # Sprint 1.2
 from routers.opposition import router as opposition_router  # Sprint 1.3
+from routers.niche import router as niche_router            # Sprint 1.4
 
 app.include_router(research_router)
 app.include_router(opposition_router)
+app.include_router(niche_router)
 
 
 # ---------------------------------------------------------------------------
