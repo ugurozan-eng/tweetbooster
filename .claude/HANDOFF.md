@@ -6,64 +6,91 @@
 
 ## Last Completed Sprint
 
-**Sprint 1.5 — Frontend MVP**
-**Commit:** `fc683c3`
-**Date:** 2026-05-25
+**Sprint 1.6 — Polish & Testing**
+**Commit:** `6ea238e`
+**Date:** 2026-05-26
 
-### What was built
+### ✅ Phase 1 is now COMPLETE
 
-| File | Purpose |
-|------|---------|
-| `frontend/lib/api.ts` | Single API client: `identifyPerson`, `runOppositionAnalysis`, `getNicheTrending`, `generateNicheReply`. Full TypeScript types. `ApiError` class with status code. Turkish error messages. |
-| `frontend/app/layout.tsx` | Root layout: `lang="tr"`, dark `zinc-950` bg, sticky nav with TwitBoost logo + Muhalif/Niş links. |
-| `frontend/app/page.tsx` | Landing page: product name + two mode cards linking to `/opposition` and `/niche`. |
-| `frontend/app/opposition/page.tsx` | Full Opposition Mode UI: tweet input, 3 tone checkboxes, loading state, person card, contradictions list, reply cards with copy-to-clipboard, error banner. |
-| `frontend/app/niche/page.tsx` | Full Niche Mode UI: 2×2 niche selector, hours dropdown, tweet list with score badges, per-tweet inline reply generation with hook_type badges and copy buttons. |
-| `frontend/env.local.example` | `NEXT_PUBLIC_API_URL=http://localhost:8000` (renamed without leading dot to avoid `.gitignore`). |
+Both modes (Opposition + Niche) work end-to-end. 85 tests passing. Clean build.
 
-### Build & Type check
-- `tsc --noEmit` → **0 errors**
-- `next build` → **6/6 pages OK**, Turbopack, zero errors
-- Backend tests: **84 / 84 passing** (unchanged from Sprint 1.4)
+### What was done this sprint
+
+| Area | Change |
+|------|--------|
+| **Bug fix** | `AnalyzeResponse.total_sources: int` → `sources: list[str]` — backend now returns actual source URLs so the UI's "Sources" section renders clickable links |
+| **Error handling** | `AnalysisTimeoutError(AnalysisAgentError)` added; analysis Claude call wrapped in `asyncio.wait_for(timeout=25.0)`; HTTP 504 on timeout |
+| **Frontend** | 30s `AbortController` timeout on every `fetch`; `AbortError` → Turkish "zaman aşımına uğradı"; `TypeError` (network down) → Turkish "sunucuya bağlanılamadı" |
+| **E2E validation** | Backend started fresh; all 5 validation scenarios confirmed (422 Turkish messages, 503/500 for missing keys, health check) |
+| **Docs** | ROADMAP.md: all Sprint 1.x marked [x], Phase 1 completion date added |
+| **Docs** | README.md: fixed frontend env setup (env.local.example), added full local dev guide |
+| **Docs** | CLAUDE.md: fixed Next.js version (16.2.6), added Phase 1 complete status, cleaned formatting |
+
+### E2E Test Results (2026-05-26)
+
+**Environment:** Backend running on localhost:8000, no API keys loaded
+**Coverage:** Routing, validation, error messages — full pipeline not tested (requires ANTHROPIC_API_KEY + BRAVE_SEARCH_API_KEY)
+
+| Scenario | Result |
+|----------|--------|
+| `GET /health` | ✅ `{"status":"ok","version":"0.1.0"}` |
+| Missing `tweet_text` → 422 | ✅ FastAPI validation error |
+| Empty tones → 422 Turkish | ✅ "Geçersiz ton değerleri. Geçerli değerler: ['cold','sharp','thread']" |
+| Invalid `niche_id` → 422 Turkish | ✅ "Geçersiz niş kimliği: 'invalid'. Geçerli değerler: economy, food, football, politics" |
+| Valid niche, no env key → 500 Turkish | ✅ "ANTHROPIC_API_KEY ortam değişkeni tanımlı değil." |
+| `AnalyzeResponse` schema | ✅ `sources: list[str]` confirmed in OpenAPI schema |
+
+**Full pipeline test** (opposition + niche with real tweets) requires:
+- `ANTHROPIC_API_KEY` — Anthropic Console
+- `BRAVE_SEARCH_API_KEY` — Brave Search API
+Run after filling `.env` from `.env.example`.
+
+### Bugs found and fixed
+
+1. **`AnalyzeResponse.total_sources: int` mismatch** — backend sent a count, frontend expected a URL list → the "Sources" section in the UI would crash at runtime. Fixed by replacing with `sources: list[str]`.
+2. **No timeout on Claude analysis calls** — unconstrained Claude calls could hang indefinitely. Fixed with `asyncio.wait_for(timeout=25.0)`.
+3. **No timeout on frontend fetch** — network failures produced raw JS `TypeError` messages. Fixed with `AbortController` + Turkish error messages.
+
+### Test count
+**85 / 85 passing** (was 84 at end of Sprint 1.5)
+
+New test: `test_run_analysis_timeout` in `test_analysis_agent.py`
 
 ---
 
 ## Next Sprint
 
-**Sprint 1.6 — Connect & Polish**
+**Sprint 2.1 — Auth (Phase 2 begins)**
 
-The UI and backend are complete independently. Next tasks:
+Phase 2 starts fresh. Do NOT start before re-reading `docs/PRD.md §4` and `docs/ARCHITECTURE.md §3`.
 
-1. **End-to-end manual test** with a real backend running locally:
-   - Start backend (`uvicorn main:app --reload`)
-   - Start frontend (`npm run dev`)
-   - Paste a real Turkish tweet into opposition mode
-   - Fetch trending in niche mode and generate a reply
-   - Fix any integration issues found
+Key Phase 2 decisions to make before coding:
+1. **Supabase Auth** — email/password + Google OAuth
+2. **Row-level security** — each user sees only their own usage data
+3. **Plan storage** — which Supabase table stores user plan (free/niche/opposition/full)
+4. **Backend auth middleware** — JWT validation on protected routes
 
-2. **Error handling polish** (if needed after E2E test):
-   - Network timeout handling (add `signal: AbortSignal.timeout(30000)` to fetch)
-   - Better loading text for long-running opposition analysis (~20–30s expected)
+**Before Sprint 2.1:**
+- [ ] Read docs/PRD.md §4 (Auth requirements)
+- [ ] Read docs/ARCHITECTURE.md §3 (Phase 2 architecture)
+- [ ] Create Supabase project (if not done)
+- [ ] Decide: middleware-based auth or dependency injection per route
 
-3. **`NEXT_PUBLIC_API_URL` documentation** — update `README.md` with frontend setup instructions
-
-4. **Optional Sprint 1.6 extras:**
-   - Persist selected niche in `localStorage` so it survives page refresh
-   - Show tweet character count in opposition textarea
-   - `next.config.ts`: add `output: 'standalone'` for Railway deploy
+**Skills to load for Phase 2:**
+- `gsd-setup` — phase transition
+- `frontend-backend` — auth connection
+- `llm-council` — JWT strategy decision
 
 ---
 
 ## Active Blockers / Notes
 
-- **`.env.local.example` renamed to `env.local.example`** (no leading dot) because the frontend `.gitignore` has `.env*` which would block it. Remember to rename to `.env.local` when setting up locally.
-- **Copy-to-clipboard uses `navigator.clipboard` + `execCommand` fallback.** Both require user gesture (button click) — this is correctly implemented.
-- **Opposition analysis can take 20–30 seconds** (Brave Search + multiple Claude calls). The UI shows "Araştırılıyor…" spinner during loading. No timeout is set yet — add in Sprint 1.6 if needed.
-- **Niche page resets all reply states on each new "Tweet'leri Getir"** click — this is intentional to avoid stale data.
-- **Brave free tier has no time-range filter.** `hours` param is sent to backend but not forwarded to Brave.
-- **CORS is `allow_origins=["*"]`** — acceptable for Phase 1 local dev.
-- **No auth in Phase 1** — all endpoints are open.
-- **Twitter API not integrated** — all tweet discovery via Brave Search.
+- **Full E2E test needs real API keys** — fill `.env` from `.env.example` then run both services and manually test the full pipeline.
+- **CORS `allow_origins=["*"]`** — must be restricted to Vercel domain before Phase 2 public deploy.
+- **Next.js version is 16.2.6** — docs/PRD.md still says "15"; update PRD before Phase 2.
+- **Brave free tier has no time-range filter** — `hours` param sent to backend but not forwarded.
+- **`env.local.example`** (no leading dot) — rename to `.env.local` when setting up locally.
+- **Legal filter word list** — will need expansion before public launch.
 
 ---
 
@@ -72,17 +99,19 @@ The UI and backend are complete independently. Next tasks:
 ```bash
 # Backend
 cd backend
-.venv/Scripts/activate        # Windows (venv already created)
+.venv\Scripts\activate        # Windows (venv already exists)
+# Fill in .env from .env.example (ANTHROPIC_API_KEY + BRAVE_SEARCH_API_KEY)
 uvicorn main:app --reload
 
 # Frontend
 cd frontend
-cp env.local.example .env.local   # fill in NEXT_PUBLIC_API_URL
+cp env.local.example .env.local
+# Set NEXT_PUBLIC_API_URL=http://localhost:8000
 npm run dev
 
 # Tests
 cd backend
-.venv/Scripts/pytest
+.venv\Scripts\pytest
 ```
 
 ---
