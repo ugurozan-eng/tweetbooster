@@ -13,22 +13,22 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // ---------------------------------------------------------------------------
-// Env vars — validated at module load time (fails loud in dev if missing)
+// Env vars
+// IMPORTANT: Must use dot notation (process.env.NEXT_PUBLIC_XXX), not bracket
+// notation. Turbopack/Webpack inlines NEXT_PUBLIC_* values at compile time via
+// static analysis — bracket notation (process.env[name]) is not replaced and
+// results in undefined at runtime in the browser.
 // ---------------------------------------------------------------------------
 
-function requireEnv(name: string): string {
-  const value = process.env[name] ?? "";
-  if (!value && typeof window !== "undefined") {
-    // Warn in browser console — don't throw so page still renders
-    console.warn(`[supabase] ${name} is not set. Auth will not work.`);
-  }
-  return value;
-}
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
-const SUPABASE_URL = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
-// Supabase now issues sb_publishable_* keys (replaces the old eyJ... anon JWT).
-// Both formats work with createClient() — just pass whichever you have.
-const SUPABASE_ANON_KEY = requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+if (!SUPABASE_URL && typeof window !== "undefined") {
+  console.warn("[supabase] NEXT_PUBLIC_SUPABASE_URL is not set. Auth will not work.");
+}
+if (!SUPABASE_ANON_KEY && typeof window !== "undefined") {
+  console.warn("[supabase] NEXT_PUBLIC_SUPABASE_ANON_KEY is not set. Auth will not work.");
+}
 
 // ---------------------------------------------------------------------------
 // Singleton — module-level, one instance per JS context
