@@ -4,11 +4,11 @@ TwitBoost — Analysis Agent
 Orchestrates the two-stage AI pipeline for Opposition Mode:
 
   Stage 1 — Inconsistency Analysis
-    Calls Claude with ``inconsistency_analyzer.txt`` to find contradictions
+    Calls Gemini with ``inconsistency_analyzer.txt`` to find contradictions
     between the current tweet and the research results.
 
   Stage 2 — Reply Generation (parallel)
-    Calls Claude three times concurrently (one per tone: cold / sharp / thread)
+    Calls Gemini three times concurrently (one per tone: cold / sharp / thread)
     using the matching ``reply_generator_<tone>.txt`` prompt.
     After generation, every reply is passed through the legal safety filter.
     Any reply that fails the filter is set to ``None`` in the output.
@@ -17,7 +17,7 @@ Token budget (ARCHITECTURE.md §6 / COMMON_MISTAKES.md)
 -------------------------------------------------------
   • Inconsistency analysis : max_tokens = 1500
   • Each reply generator   : max_tokens = 1000
-  • Model for all calls    : claude-sonnet-4-20250514
+  • Model for all calls    : gemini-2.5-pro
 """
 
 from __future__ import annotations
@@ -29,7 +29,8 @@ import sys
 from pathlib import Path
 from typing import Literal, TypedDict
 
-import anthropic
+from google import genai
+from google.genai import types
 
 from services.legal_safety_filter import check_reply, check_thread
 from services.research_agent import ResearchResult
@@ -38,7 +39,7 @@ from services.research_agent import ResearchResult
 # Constants
 # ---------------------------------------------------------------------------
 
-_MODEL = "claude-sonnet-4-20250514"
+_MODEL = "gemini-2.5-pro"
 _ANALYSIS_MAX_TOKENS = 1500
 _REPLY_MAX_TOKENS = 1000
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
@@ -80,11 +81,11 @@ class AnalysisOutput(TypedDict):
 
 
 class AnalysisAgentError(Exception):
-    """Raised when a Claude API call in the analysis pipeline fails."""
+    """Raised when a Gemini API call in the analysis pipeline fails."""
 
 
 class AnalysisTimeoutError(AnalysisAgentError):
-    """Raised when a Claude API call exceeds the 25-second timeout threshold."""
+    """Raised when a Gemini API call exceeds the 25-second timeout threshold."""
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +106,7 @@ def _load_prompt(filename: str) -> str:
 
 def _parse_json_response(raw: str, context: str) -> dict:
     """
-    Parse JSON from a Claude response, tolerating markdown code-fence wrapping.
+    Parse JSON from a Gemini response, tolerating markdown code-fence wrapping.
     ``context`` is used only in error messages.
     """
     text = raw.strip()
@@ -124,7 +125,7 @@ def _parse_json_response(raw: str, context: str) -> dict:
             except json.JSONDecodeError:
                 pass
     raise AnalysisAgentError(
-        f"Could not parse JSON from Claude response [{context}]: {text[:300]}"
+        f"Could not parse JSON from Gemini response [{context}]: {text[:300]}"
     )
 
 
@@ -186,12 +187,12 @@ def _normalise_confidence(value: object) -> Literal["high", "medium", "low"]:
 
 
 async def _analyze_inconsistencies(
-    client: anthropic.AsyncAnthropic,
+    client: genai.Client,
     current_tweet: str,
     sources: list[ResearchResult],
 ) -> tuple[str, list[ContradictionItem], Literal["high", "medium", "low"]]:
     """
-    Call Claude to find contradictions between ``current_tweet`` and ``sources``.
+    Call Gemini to find contradictions between ``current_tweet`` and ``sources``.
 
     Returns:
         (person_name, contradictions, overall_confidence)
@@ -204,26 +205,28 @@ async def _analyze_inconsistencies(
     )
 
     try:
-        message = await asyncio.wait_for(
-            client.messages.create(
+        response = await asyncio.wait_for(
+            client.aio.models.generate_content(
                 model=_MODEL,
-                max_tokens=_ANALYSIS_MAX_TOKENS,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_msg}],
+                contents=user_msg,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    max_output_tokens=_ANALYSIS_MAX_TOKENS,
+                ),
             ),
             timeout=25.0,
         )
     except asyncio.TimeoutError as exc:
         raise AnalysisTimeoutError(
-            "Claude analiz çağrısı zaman aşımına uğradı (25 saniye). "
+            "Gemini analiz çağrısı zaman aşımına uğradı (25 saniye). "
             "Lütfen daha sonra tekrar deneyin."
         ) from exc
-    except anthropic.APIError as exc:
+    except Exception as exc:
         raise AnalysisAgentError(
-            f"Claude API error in inconsistency analysis: {exc}"
+            f"Gemini API error in inconsistency analysis: {exc}"
         ) from exc
 
-    data = _parse_json_response(message.content[0].text, "inconsistency_analyzer")
+    data = _parse_json_response(response.text or "", "inconsistency_analyzer")
 
     person_name: str = data.get("person_name") or "Bilinmiyor"
     overall_conf = _normalise_confidence(data.get("overall_confidence", "low"))
@@ -252,7 +255,7 @@ async def _analyze_inconsistencies(
 
 
 async def _generate_reply(
-    client: anthropic.AsyncAnthropic,
+    client: genai.Client,
     tone: str,
     person_name: str,
     current_tweet: str,
@@ -262,7 +265,7 @@ async def _generate_reply(
     """
     Generate a single reply variant for ``tone``.
 
-    Returns ``None`` if the Claude call fails OR the legal filter blocks it.
+    Returns ``None`` if the Gemini call fails OR the legal filter blocks it.
     Errors are printed to stderr but do not propagate (resilient design).
     """
     prompt_file = f"reply_generator_{tone}.txt"
@@ -275,21 +278,23 @@ async def _generate_reply(
     user_msg = _build_reply_user_message(person_name, current_tweet, contradictions, sources)
 
     try:
-        message = await client.messages.create(
+        response = await client.aio.models.generate_content(
             model=_MODEL,
-            max_tokens=_REPLY_MAX_TOKENS,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_msg}],
+            contents=user_msg,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=_REPLY_MAX_TOKENS,
+            ),
         )
-    except anthropic.APIError as exc:
+    except Exception as exc:
         print(
-            f"[analysis_agent] Claude API error for tone '{tone}': {exc}",
+            f"[analysis_agent] Gemini API error for tone '{tone}': {exc}",
             file=sys.stderr,
         )
         return None
 
     try:
-        data = _parse_json_response(message.content[0].text, f"reply_generator_{tone}")
+        data = _parse_json_response(response.text or "", f"reply_generator_{tone}")
     except AnalysisAgentError as exc:
         print(f"[analysis_agent] JSON parse error for tone '{tone}': {exc}", file=sys.stderr)
         return None
@@ -341,18 +346,18 @@ async def run_analysis(
         source list, and a status flag.
 
     Raises:
-        EnvironmentError:   ``ANTHROPIC_API_KEY`` is not set.
-        AnalysisAgentError: The inconsistency-analysis Claude call failed fatally.
+        EnvironmentError:   ``GEMINI_API_KEY`` is not set.
+        AnalysisAgentError: The inconsistency-analysis Gemini call failed fatally.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise EnvironmentError(
-            "ANTHROPIC_API_KEY is not set. "
-            "Copy .env.example to .env and fill in your Anthropic API key."
+            "GEMINI_API_KEY is not set. "
+            "Copy .env.example to .env and fill in your Gemini API key."
         )
 
     requested_tones = [t for t in (tones or list(_VALID_TONES)) if t in _VALID_TONES]
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
     # ── Stage 1: inconsistency analysis ──────────────────────────────────
     person_name, contradictions, overall_conf = await _analyze_inconsistencies(

@@ -25,7 +25,7 @@ from services.analysis_agent import (
     ReplyVariant,
     run_analysis,
 )
-from services.person_identifier import PersonIdentifierError, identify_person
+from services.person_identifier import PersonIdentifierError, PersonNotFoundError, identify_person
 from services.plan_checker import check_daily_limit, check_permission, log_usage
 from services.research_agent import run_research
 
@@ -121,20 +121,16 @@ async def analyze(
     # ── Step 1: person identification ─────────────────────────────────────
     try:
         person = await identify_person(body.tweet_text)
+    except PersonNotFoundError:
+        # Tweet has no identifiable person — user guidance, not a system error.
+        raise HTTPException(
+            status_code=422,
+            detail="Tweet'te tanımlanabilir bir kişi bulunamadı. Lütfen bir kişiye ait tweet yapıştırın.",
+        )
     except EnvironmentError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except (PersonIdentifierError, FileNotFoundError) as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-
-    if not person["name"]:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Kişi tespit edilemedi. "
-                "Lütfen tweet metninin kişiye ait açık bir isim veya kullanıcı adı içerdiğinden "
-                "emin olun."
-            ),
-        )
 
     # ── Step 2: research ─────────────────────────────────────────────────
     try:

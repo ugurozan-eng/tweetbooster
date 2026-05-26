@@ -5,7 +5,7 @@ Two entry-points:
 
   ``get_trending(niche_id, hours)``
       Search Brave for trending tweets in the given niche, then score and
-      rank them with Claude.  Returns a list of ``ScoredTweet`` dicts.
+      rank them with Gemini 2.5 Pro.  Returns a list of ``ScoredTweet`` dicts.
 
   ``generate_reply(tweet_text, niche_id)``
       Generate three engagement-optimised Turkish replies for a tweet in
@@ -21,7 +21,7 @@ Design notes
   ``{{double_braces}}`` so they cannot accidentally collide with Python
   f-string or Jinja syntax.
 - Legal-safety filter runs AFTER generation, per COMMON_MISTAKES.md.
-- Claude API calls are capped at 1 500 output tokens (scorer) and 800
+- Gemini API calls are capped at 1 500 output tokens (scorer) and 800
   tokens (reply generator) to stay within budget.
 - ``asyncio.gather(return_exceptions=True)`` is used wherever parallel
   Brave calls happen so a single failure doesn't abort the whole request.
@@ -35,7 +35,8 @@ import os
 from pathlib import Path
 from typing import TypedDict
 
-import anthropic
+from google import genai
+from google.genai import types
 
 from config.niches import get_niche
 from services.brave_search import search
@@ -45,7 +46,7 @@ from services.legal_safety_filter import check_reply
 # Configuration
 # ---------------------------------------------------------------------------
 
-_MODEL = "claude-sonnet-4-20250514"
+_MODEL = "gemini-2.5-pro"
 _SCORER_MAX_TOKENS = 1500
 _REPLY_MAX_TOKENS = 800
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
@@ -105,10 +106,10 @@ def _fill_template(template: str, **kwargs: str) -> str:
 
 def _parse_json_response(raw: str, context: str) -> dict:
     """
-    Parse a JSON string from Claude, stripping any markdown code fences.
+    Parse a JSON string from Gemini, stripping any markdown code fences.
 
     Args:
-        raw: Raw text from Claude's response.
+        raw: Raw text from Gemini's response.
         context: Short description used in error messages.
 
     Raises:
@@ -123,7 +124,7 @@ def _parse_json_response(raw: str, context: str) -> dict:
         return json.loads(text)
     except json.JSONDecodeError as exc:
         raise NicheAgentError(
-            f"Claude yanıtı JSON olarak çözümlenemedi ({context}): {exc}. "
+            f"Gemini yanıtı JSON olarak çözümlenemedi ({context}): {exc}. "
             f"Ham yanıt: {raw[:200]}"
         )
 
@@ -178,17 +179,17 @@ async def _fetch_search_results(niche_id: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 — score with Claude
+# Stage 2 — score with Gemini
 # ---------------------------------------------------------------------------
 
 
 async def _score_tweets(
     search_results: list[dict],
     niche_id: str,
-    client: anthropic.AsyncAnthropic,
+    client: genai.Client,
 ) -> list[ScoredTweet]:
     """
-    Ask Claude to score each search result and return them sorted by score
+    Ask Gemini to score each search result and return them sorted by score
     descending.
 
     Returns an empty list if *search_results* is empty.
@@ -205,12 +206,14 @@ async def _score_tweets(
         tweets_json=_build_tweets_json(search_results),
     )
 
-    message = await client.messages.create(
+    response = await client.aio.models.generate_content(
         model=_MODEL,
-        max_tokens=_SCORER_MAX_TOKENS,
-        messages=[{"role": "user", "content": prompt}],
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            max_output_tokens=_SCORER_MAX_TOKENS,
+        ),
     )
-    raw = message.content[0].text
+    raw = response.text or ""
     data = _parse_json_response(raw, "niche_tweet_scorer")
 
     scored: list[ScoredTweet] = []
@@ -228,7 +231,7 @@ async def _score_tweets(
             # Skip malformed entries rather than aborting.
             continue
 
-    # Ensure descending order (Claude should already do this, but be safe).
+    # Ensure descending order (Gemini should already do this, but be safe).
     scored.sort(key=lambda x: x["score"], reverse=True)
     return scored
 
@@ -252,26 +255,26 @@ async def get_trending(niche_id: str, hours: int = 1) -> list[ScoredTweet]:
 
     Returns:
         Scored and ranked list of tweets; may be empty if Brave returns no
-        results or Claude scores everything 0.
+        results or Gemini scores everything 0.
 
     Raises:
         ValueError: *niche_id* is not recognised (propagated from
                     ``get_niche``).
         EnvironmentError: ``BRAVE_SEARCH_API_KEY`` or
-                          ``ANTHROPIC_API_KEY`` is missing.
-        NicheAgentError: Prompt file missing or Claude response
+                          ``GEMINI_API_KEY`` is missing.
+        NicheAgentError: Prompt file missing or Gemini response
                          unparseable.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise EnvironmentError(
-            "ANTHROPIC_API_KEY ortam değişkeni tanımlı değil."
+            "GEMINI_API_KEY ortam değişkeni tanımlı değil."
         )
 
     # Validate niche_id eagerly so bad input fails fast (before any HTTP).
     get_niche(niche_id)
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    client = genai.Client(api_key=api_key)
     search_results = await _fetch_search_results(niche_id)
     return await _score_tweets(search_results, niche_id, client)
 
@@ -302,16 +305,16 @@ async def generate_reply(
 
     Raises:
         ValueError: *niche_id* is not recognised.
-        EnvironmentError: ``ANTHROPIC_API_KEY`` is missing.
-        NicheAgentError: Prompt file missing or Claude response
+        EnvironmentError: ``GEMINI_API_KEY`` is missing.
+        NicheAgentError: Prompt file missing or Gemini response
                          unparseable.
         NicheReplyBlockedError: All generated replies were blocked by the
                                 legal-safety filter.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise EnvironmentError(
-            "ANTHROPIC_API_KEY ortam değişkeni tanımlı değil."
+            "GEMINI_API_KEY ortam değişkeni tanımlı değil."
         )
 
     niche = get_niche(niche_id)  # raises ValueError for unknown niche_id
@@ -325,13 +328,15 @@ async def generate_reply(
         tweet_text=tweet_text,
     )
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    message = await client.messages.create(
+    client = genai.Client(api_key=api_key)
+    response = await client.aio.models.generate_content(
         model=_MODEL,
-        max_tokens=_REPLY_MAX_TOKENS,
-        messages=[{"role": "user", "content": prompt}],
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            max_output_tokens=_REPLY_MAX_TOKENS,
+        ),
     )
-    raw = message.content[0].text
+    raw = response.text or ""
     data = _parse_json_response(raw, "niche_reply_generator")
 
     # Parse and filter replies.

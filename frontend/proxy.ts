@@ -18,22 +18,23 @@ import { NextResponse } from "next/server";
 const PROTECTED_PATHS = ["/opposition", "/niche"];
 const AUTH_COOKIE = "twitboost-authed";
 
+// AUTH BYPASS — Sprint 2.2 design testing. Re-enable for production.
+// To restore: uncomment the protection block below and remove this early return.
 export function proxy(req: NextRequest) {
+  return NextResponse.next();
+
+  /* PRODUCTION AUTH (keep dormant):
   const { pathname } = req.nextUrl;
-
   const isProtected = PROTECTED_PATHS.some((p) => pathname.startsWith(p));
-  if (!isProtected) {
-    return NextResponse.next();
-  }
-
+  if (!isProtected) return NextResponse.next();
   const isAuthed = Boolean(req.cookies.get(AUTH_COOKIE)?.value);
   if (!isAuthed) {
     const loginUrl = new URL("/login", req.nextUrl);
-    loginUrl.searchParams.set("next", pathname); // preserve intended destination
+    loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
-
   return NextResponse.next();
+  */
 }
 
 export const config = {

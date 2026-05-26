@@ -2,48 +2,98 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] px-4">
-      <div className="text-center max-w-xl w-full">
-        {/* Product name */}
-        <h1 className="text-4xl sm:text-5xl font-bold text-white mb-3 tracking-tight">
-          TwitBoost
-        </h1>
-        <p className="text-zinc-400 mb-10 text-base sm:text-lg">
-          AI destekli Twitter yanıt aracı — Türkçe kullanıcılar için
+    <div
+      className="min-h-[calc(100vh-5rem)] flex flex-col justify-center px-4 py-16 max-w-6xl mx-auto"
+    >
+      <div className="stagger-in">
+
+        {/* ── Eyebrow ──────────────────────────────────────────────── */}
+        <p className="eyebrow mb-4">
+          AI destekli siyasi analiz aracı · Türk Twitter kullanıcıları için
         </p>
 
-        {/* Mode buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        {/* ── Hero headline ────────────────────────────────────────── */}
+        <h1
+          className="font-display leading-none mb-1"
+          style={{ fontSize: "clamp(4rem, 12vw, 9rem)", color: "var(--paper)" }}
+        >
+          TROLLERE KARŞI
+        </h1>
+        <h1
+          className="font-display leading-none mb-8"
+          style={{ fontSize: "clamp(4rem, 12vw, 9rem)", color: "var(--accent)" }}
+        >
+          SİLAHIN.
+        </h1>
+
+        {/* ── Red rule ─────────────────────────────────────────────── */}
+        <div className="rule-red mb-10" />
+
+        {/* ── Mode cards — newspaper column style ──────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px" style={{ borderColor: "var(--border)" }}>
+
+          {/* Muhalif Mod */}
           <Link
             href="/opposition"
-            className="flex flex-col items-start gap-1 rounded-xl border border-zinc-700 bg-zinc-900 px-6 py-5 hover:border-blue-500 hover:bg-zinc-800 transition-all group"
+            className="group block p-6 transition-colors"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
           >
-            <span className="text-xs font-semibold text-blue-400 uppercase tracking-widest">
-              Mod 1
-            </span>
-            <span className="text-lg font-bold text-white group-hover:text-blue-300 transition-colors">
-              Muhalif Mod
-            </span>
-            <span className="text-sm text-zinc-400 text-left">
-              Tweet araştır, tutarsızlık bul, yanıt üret
-            </span>
+            <p className="eyebrow mb-3">MOD 01</p>
+            <h2
+              className="font-display leading-none mb-3"
+              style={{ fontSize: "clamp(2.5rem, 6vw, 4rem)", color: "var(--paper)" }}
+            >
+              MUHALİF MOD
+            </h2>
+            <div className="rule-red mb-4" style={{ borderColor: "var(--border)" }} />
+            <p className="font-code" style={{ color: "var(--muted)", fontSize: "0.78rem", lineHeight: 1.7 }}>
+              Bir politikacının ya da kamuoyunun önündeki ismin tweetini yapıştırın.
+              Araç geçmiş beyanlarını araştırır, çelişkileri tespit eder ve
+              hukuki açıdan güvenli yanıtlar üretir.
+            </p>
+            <p
+              className="font-display mt-5 transition-colors"
+              style={{ color: "var(--border)", fontSize: "1.1rem", letterSpacing: "0.06em" }}
+            >
+              ARAŞTIRMAYA BAŞLA →
+            </p>
           </Link>
 
+          {/* Niş Mod */}
           <Link
             href="/niche"
-            className="flex flex-col items-start gap-1 rounded-xl border border-zinc-700 bg-zinc-900 px-6 py-5 hover:border-emerald-500 hover:bg-zinc-800 transition-all group"
+            className="group block p-6 transition-colors"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
           >
-            <span className="text-xs font-semibold text-emerald-400 uppercase tracking-widest">
-              Mod 2
-            </span>
-            <span className="text-lg font-bold text-white group-hover:text-emerald-300 transition-colors">
-              Niş Mod
-            </span>
-            <span className="text-sm text-zinc-400 text-left">
-              Trend tweetleri getir, etkileşim yanıtları üret
-            </span>
+            <p className="eyebrow mb-3">MOD 02</p>
+            <h2
+              className="font-display leading-none mb-3"
+              style={{ fontSize: "clamp(2.5rem, 6vw, 4rem)", color: "var(--paper)" }}
+            >
+              NİŞ MOD
+            </h2>
+            <div className="rule-red mb-4" style={{ borderColor: "var(--border)" }} />
+            <p className="font-code" style={{ color: "var(--muted)", fontSize: "0.78rem", lineHeight: 1.7 }}>
+              İlgilendiğiniz nişi seçin — yemek, futbol, ekonomi veya siyaset.
+              Trend tweetleri getirin, etkileşim potansiyelini görün ve
+              organik büyüme için yanıtlar üretin.
+            </p>
+            <p
+              className="font-display mt-5 transition-colors"
+              style={{ color: "var(--border)", fontSize: "1.1rem", letterSpacing: "0.06em" }}
+            >
+              NİŞ SEÇ →
+            </p>
           </Link>
+
         </div>
+
+        {/* ── Bottom rule + tagline ─────────────────────────────────── */}
+        <div className="rule-red mt-10 mb-4" />
+        <p className="eyebrow text-right">
+          Hukuki güvenlik filtresi dahil · Sonuçlar Türkçe üretilir
+        </p>
+
       </div>
     </div>
   );

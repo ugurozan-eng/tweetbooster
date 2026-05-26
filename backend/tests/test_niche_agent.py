@@ -3,17 +3,17 @@ Tests for services/niche_agent.py
 
 Coverage
 --------
-- get_trending happy path: Brave returns results → Claude scores them → sorted list
+- get_trending happy path: Brave returns results → Gemini scores them → sorted list
 - get_trending empty: all Brave calls return empty → get_trending returns []
 - get_trending partial Brave failure: one query raises, others succeed → merged
 - get_trending invalid niche_id → ValueError (before any HTTP call)
-- get_trending missing ANTHROPIC_API_KEY → EnvironmentError
-- get_trending Claude returns 0 scored tweets → empty list
+- get_trending missing GEMINI_API_KEY → EnvironmentError
+- get_trending Gemini returns 0 scored tweets → empty list
 - generate_reply happy path: all 3 replies pass filter
 - generate_reply partial block: 1 reply fails filter → 2 returned
 - generate_reply all blocked → NicheReplyBlockedError raised
 - generate_reply invalid niche_id → ValueError
-- generate_reply missing ANTHROPIC_API_KEY → EnvironmentError
+- generate_reply missing GEMINI_API_KEY → EnvironmentError
 - generate_reply missing prompt file → NicheAgentError
 - Helper: _parse_json_response bare JSON
 - Helper: _parse_json_response fenced JSON
@@ -90,19 +90,18 @@ _BRAVE_RESULT_2 = {
 # ---------------------------------------------------------------------------
 
 
-def _make_message(text: str) -> MagicMock:
-    block = MagicMock()
-    block.text = text
-    msg = MagicMock()
-    msg.content = [block]
-    return msg
+def _make_response(text: str) -> MagicMock:
+    """Build a minimal mock that looks like a Gemini GenerateContentResponse."""
+    response = MagicMock()
+    response.text = text
+    return response
 
 
-def _mock_anthropic_client(responses: list[str]) -> MagicMock:
+def _mock_gemini_client(responses: list[str]) -> MagicMock:
     """
-    Build a mock AsyncAnthropic client that returns each response in order.
+    Build a mock genai.Client that returns each response in order.
     """
-    msgs = [_make_message(r) for r in responses]
+    msgs = [_make_response(r) for r in responses]
     idx = 0
 
     async def _create(*args, **kwargs):
@@ -111,10 +110,8 @@ def _mock_anthropic_client(responses: list[str]) -> MagicMock:
         idx += 1
         return r
 
-    messages_mock = MagicMock()
-    messages_mock.create = AsyncMock(side_effect=_create)
     client = MagicMock()
-    client.messages = messages_mock
+    client.aio.models.generate_content = AsyncMock(side_effect=_create)
     return client
 
 
@@ -169,17 +166,17 @@ def test_build_tweets_json_truncates_text() -> None:
 
 
 async def test_get_trending_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Brave returns 2 results → Claude scores them → sorted list returned."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    """Brave returns 2 results → Gemini scores them → sorted list returned."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     monkeypatch.setattr(
         "services.niche_agent.search",
         AsyncMock(return_value=[_BRAVE_RESULT_1, _BRAVE_RESULT_2]),
     )
 
-    mock_client = _mock_anthropic_client([_SCORED_RESPONSE])
+    mock_client = _mock_gemini_client([_SCORED_RESPONSE])
     monkeypatch.setattr(
-        "services.niche_agent.anthropic.AsyncAnthropic",
+        "services.niche_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -198,24 +195,24 @@ async def test_get_trending_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_get_trending_empty_results(monkeypatch: pytest.MonkeyPatch) -> None:
     """All Brave queries return empty lists → get_trending returns []."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     monkeypatch.setattr(
         "services.niche_agent.search",
         AsyncMock(return_value=[]),
     )
 
-    mock_client = _mock_anthropic_client([])
+    mock_client = _mock_gemini_client([])
     monkeypatch.setattr(
-        "services.niche_agent.anthropic.AsyncAnthropic",
+        "services.niche_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
     result = await get_trending("food")
 
     assert result == []
-    # Claude should NOT have been called (empty input short-circuit)
-    assert mock_client.messages.create.await_count == 0
+    # Gemini should NOT have been called (empty input short-circuit)
+    assert mock_client.aio.models.generate_content.await_count == 0
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +222,7 @@ async def test_get_trending_empty_results(monkeypatch: pytest.MonkeyPatch) -> No
 
 async def test_get_trending_partial_brave_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """One Brave query raises; the others succeed — results are still merged."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     call_count = 0
 
@@ -251,9 +248,9 @@ async def test_get_trending_partial_brave_failure(monkeypatch: pytest.MonkeyPatc
             }
         ]
     })
-    mock_client = _mock_anthropic_client([single_score])
+    mock_client = _mock_gemini_client([single_score])
     monkeypatch.setattr(
-        "services.niche_agent.anthropic.AsyncAnthropic",
+        "services.niche_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -271,7 +268,7 @@ async def test_get_trending_partial_brave_failure(monkeypatch: pytest.MonkeyPatc
 
 async def test_get_trending_invalid_niche_id(monkeypatch: pytest.MonkeyPatch) -> None:
     """Invalid niche_id raises ValueError immediately — no HTTP calls made."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     search_mock = AsyncMock()
     monkeypatch.setattr("services.niche_agent.search", search_mock)
@@ -283,34 +280,34 @@ async def test_get_trending_invalid_niche_id(monkeypatch: pytest.MonkeyPatch) ->
 
 
 # ---------------------------------------------------------------------------
-# get_trending — missing ANTHROPIC_API_KEY
+# get_trending — missing GEMINI_API_KEY
 # ---------------------------------------------------------------------------
 
 
 async def test_get_trending_missing_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
-    with pytest.raises(EnvironmentError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(EnvironmentError, match="GEMINI_API_KEY"):
         await get_trending("food")
 
 
 # ---------------------------------------------------------------------------
-# get_trending — Claude scores 0 tweets
+# get_trending — Gemini scores 0 tweets
 # ---------------------------------------------------------------------------
 
 
 async def test_get_trending_zero_scores(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Claude returns empty scored_tweets → get_trending returns []."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    """Gemini returns empty scored_tweets → get_trending returns []."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     monkeypatch.setattr(
         "services.niche_agent.search",
         AsyncMock(return_value=[_BRAVE_RESULT_1]),
     )
 
-    mock_client = _mock_anthropic_client([_EMPTY_SCORED_RESPONSE])
+    mock_client = _mock_gemini_client([_EMPTY_SCORED_RESPONSE])
     monkeypatch.setattr(
-        "services.niche_agent.anthropic.AsyncAnthropic",
+        "services.niche_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -325,11 +322,11 @@ async def test_get_trending_zero_scores(monkeypatch: pytest.MonkeyPatch) -> None
 
 async def test_generate_reply_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """All 3 replies are clean → all 3 returned."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
-    mock_client = _mock_anthropic_client([_REPLY_RESPONSE])
+    mock_client = _mock_gemini_client([_REPLY_RESPONSE])
     monkeypatch.setattr(
-        "services.niche_agent.anthropic.AsyncAnthropic",
+        "services.niche_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -349,7 +346,7 @@ async def test_generate_reply_happy_path(monkeypatch: pytest.MonkeyPatch) -> Non
 
 async def test_generate_reply_partial_block(monkeypatch: pytest.MonkeyPatch) -> None:
     """Sharp/dirty second reply is filtered out; question and fact remain."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     dirty_response = json.dumps({
         "replies": [
@@ -359,9 +356,9 @@ async def test_generate_reply_partial_block(monkeypatch: pytest.MonkeyPatch) -> 
         ]
     })
 
-    mock_client = _mock_anthropic_client([dirty_response])
+    mock_client = _mock_gemini_client([dirty_response])
     monkeypatch.setattr(
-        "services.niche_agent.anthropic.AsyncAnthropic",
+        "services.niche_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -381,7 +378,7 @@ async def test_generate_reply_partial_block(monkeypatch: pytest.MonkeyPatch) -> 
 
 async def test_generate_reply_all_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
     """All 3 replies fail the filter → NicheReplyBlockedError raised."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     all_dirty = json.dumps({
         "replies": [
@@ -391,9 +388,9 @@ async def test_generate_reply_all_blocked(monkeypatch: pytest.MonkeyPatch) -> No
         ]
     })
 
-    mock_client = _mock_anthropic_client([all_dirty])
+    mock_client = _mock_gemini_client([all_dirty])
     monkeypatch.setattr(
-        "services.niche_agent.anthropic.AsyncAnthropic",
+        "services.niche_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -407,30 +404,30 @@ async def test_generate_reply_all_blocked(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 async def test_generate_reply_invalid_niche_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Invalid niche_id raises ValueError — no Claude call made."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    """Invalid niche_id raises ValueError — no Gemini call made."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
-    mock_client = _mock_anthropic_client([])
+    mock_client = _mock_gemini_client([])
     monkeypatch.setattr(
-        "services.niche_agent.anthropic.AsyncAnthropic",
+        "services.niche_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
     with pytest.raises(ValueError, match="Geçersiz niş"):
         await generate_reply("Test tweet.", "not_a_real_niche")
 
-    assert mock_client.messages.create.await_count == 0
+    assert mock_client.aio.models.generate_content.await_count == 0
 
 
 # ---------------------------------------------------------------------------
-# generate_reply — missing ANTHROPIC_API_KEY
+# generate_reply — missing GEMINI_API_KEY
 # ---------------------------------------------------------------------------
 
 
 async def test_generate_reply_missing_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
-    with pytest.raises(EnvironmentError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(EnvironmentError, match="GEMINI_API_KEY"):
         await generate_reply("Test tweet.", "food")
 
 
@@ -443,7 +440,7 @@ async def test_generate_reply_missing_prompt_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """If the prompt file is missing, NicheAgentError is raised."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     # Point _PROMPTS_DIR at a temp directory that has no .txt files.
     monkeypatch.setattr("services.niche_agent._PROMPTS_DIR", tmp_path)

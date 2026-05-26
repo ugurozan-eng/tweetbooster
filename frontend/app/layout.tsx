@@ -1,74 +1,109 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bebas_Neue, JetBrains_Mono, Geist } from "next/font/google";
 import Link from "next/link";
-import AuthHeader from "@/components/AuthHeader";
 import "./globals.css";
 
-const geistSans = Geist({
+// ── Fonts ─────────────────────────────────────────────────────────────────
+
+const bebas = Bebas_Neue({
+  weight: "400",
+  variable: "--font-bebas",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const jetbrains = JetBrains_Mono({
+  variable: "--font-jetbrains",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+});
+
+// Keep Geist as fallback (used by --font-geist-sans legacy token)
+const geist = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// ── Metadata ───────────────────────────────────────────────────────────────
 
 export const metadata: Metadata = {
-  title: "TwitBoost — AI Destekli Twitter Yanıt Aracı",
-  description:
-    "Muhalif mod ve niş mod ile Twitter'da etkili yanıtlar üretin.",
+  title: "TwitBoost — Siyasi Analiz Aracı",
+  description: "Trollere karşı silahın. AI destekli Twitter yanıt ve araştırma aracı.",
 };
+
+// ── Layout ─────────────────────────────────────────────────────────────────
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
       lang="tr"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${bebas.variable} ${jetbrains.variable} ${geist.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">
-        {/* ── Nav ───────────────────────────────────────────────────────── */}
-        <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur sticky top-0 z-10">
-          <div className="mx-auto max-w-5xl flex items-center justify-between px-4 py-3">
-            {/* Logo */}
+      <body
+        className="min-h-full flex flex-col"
+        style={{ background: "var(--bg)", color: "var(--paper)" }}
+      >
+        {/* ── Nav ─────────────────────────────────────────────────────── */}
+        <header
+          className="sticky top-0 z-20"
+          style={{
+            background: "var(--bg)",
+            borderBottom: "1px solid var(--border)",
+            borderBottomColor: "var(--accent)",
+            borderBottomWidth: "1px",
+          }}
+        >
+          {/* thin red line at very top */}
+          <div style={{ height: "2px", background: "var(--accent)" }} />
+
+          <div className="mx-auto max-w-6xl flex items-center justify-between px-4 py-2">
+            {/* Wordmark */}
             <Link
               href="/"
-              className="text-lg font-bold text-white tracking-tight hover:text-blue-400 transition-colors"
+              className="font-display text-2xl tracking-wide"
+              style={{ color: "var(--paper)", lineHeight: 1 }}
             >
-              TwitBoost
+              TWITBOOST
             </Link>
 
-            {/* Nav links + auth */}
-            <div className="flex items-center gap-1">
-              <nav className="flex items-center gap-1 mr-2">
-                <Link
-                  href="/opposition"
-                  className="px-3 py-1.5 rounded-md text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
-                >
-                  Muhalif Mod
-                </Link>
-                <Link
-                  href="/niche"
-                  className="px-3 py-1.5 rounded-md text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
-                >
-                  Niş Mod
-                </Link>
-              </nav>
-              <AuthHeader />
-            </div>
+            {/* Nav links */}
+            <nav className="flex items-center gap-0">
+              <Link
+                href="/opposition"
+                className="font-code text-xs tracking-widest uppercase px-4 py-3 transition-colors text-muted hover:text-paper"
+              >
+                Muhalif
+              </Link>
+              <Link
+                href="/niche"
+                className="font-code text-xs tracking-widest uppercase px-4 py-3 transition-colors text-muted hover:text-paper"
+              >
+                Niş
+              </Link>
+            </nav>
           </div>
         </header>
 
-        {/* ── Page content ──────────────────────────────────────────────── */}
+        {/* ── Page content ────────────────────────────────────────────── */}
         <main className="flex-1">{children}</main>
 
-        {/* ── Footer ───────────────────────────────────────────────────── */}
-        <footer className="border-t border-zinc-800 py-4 text-center text-xs text-zinc-600">
-          TwitBoost — Faz 2
+        {/* ── Footer ──────────────────────────────────────────────────── */}
+        <footer
+          className="py-3 px-4 text-center"
+          style={{
+            borderTop: "1px solid var(--border)",
+            color: "var(--muted)",
+            fontSize: "0.6rem",
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            fontFamily: "var(--font-jetbrains), monospace",
+          }}
+        >
+          TwitBoost — Türk Twitter Kullanıcıları için AI Araştırma Aracı
         </footer>
       </body>
     </html>

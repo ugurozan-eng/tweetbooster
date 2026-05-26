@@ -36,15 +36,22 @@ async def get_current_user(
     Raises:
         HTTP 401 — if Authorization header is missing or JWT is invalid/expired.
     """
+    # DEV BYPASS — Sprint 2.2 design testing. Re-enable auth before production.
+    # To restore: remove this block and uncomment the 401 raise below.
     if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=(
-                "Kimlik doğrulaması gerekiyor. "
-                "Lütfen giriş yapın."
-            ),
-            headers={"WWW-Authenticate": "Bearer"},
+        return UserClaims(
+            user_id="dev-bypass",
+            email="dev@twitboost.local",
+            plan="full",
         )
+
+    # PRODUCTION AUTH (keep dormant):
+    # if credentials is None:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED,
+    #         detail="Kimlik doğrulaması gerekiyor. Lütfen giriş yapın.",
+    #         headers={"WWW-Authenticate": "Bearer"},
+    #     )
 
     try:
         return verify_jwt(credentials.credentials)

@@ -9,126 +9,161 @@ import {
   ApiError,
 } from "@/lib/api";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ── Constants ──────────────────────────────────────────────────────────────
 
-const TONE_LABELS: Record<string, string> = {
-  cold: "Soğuk",
-  sharp: "Keskin",
-  thread: "Thread",
+const TONE_KEYS = ["cold", "sharp", "thread"] as const;
+type ToneKey = (typeof TONE_KEYS)[number];
+
+const TONE_LABELS: Record<ToneKey, string> = {
+  cold:   "SOĞUK",
+  sharp:  "KESKİN",
+  thread: "THREAD",
 };
 
-const TONE_DESCRIPTIONS: Record<string, string> = {
-  cold: "Nötr, gazetecilik tonu",
-  sharp: "İğneleyici, dokunaklı",
+const TONE_DESC: Record<ToneKey, string> = {
+  cold:   "Nötr, gazetecilik",
+  sharp:  "İğneleyici, dokunaklı",
   thread: "Çok tweetlik dizi",
 };
 
-const CONFIDENCE_STYLES: Record<string, string> = {
-  high: "bg-green-900/40 text-green-400 border-green-700",
-  medium: "bg-yellow-900/40 text-yellow-400 border-yellow-700",
-  low: "bg-red-900/40 text-red-400 border-red-700",
+const CONFIDENCE_LABEL: Record<string, string> = {
+  high:   "YÜKSEK",
+  medium: "ORTA",
+  low:    "DÜŞÜK",
 };
 
-const CONFIDENCE_LABELS: Record<string, string> = {
-  high: "Yüksek",
-  medium: "Orta",
-  low: "Düşük",
-};
+// ── Sub-components ──────────────────────────────────────────────────────────
 
-function confidenceStyle(c: string): string {
+/** Horizontal scan-line loading state */
+function LoadingBar() {
   return (
-    CONFIDENCE_STYLES[c.toLowerCase()] ??
-    "bg-zinc-800 text-zinc-400 border-zinc-700"
+    <div className="scanning h-px w-full my-6" style={{ background: "var(--border)" }} />
   );
 }
 
-function confidenceLabel(c: string): string {
-  return CONFIDENCE_LABELS[c.toLowerCase()] ?? c;
-}
+/** Press ID badge for the identified person */
+function PersonBadge({ result }: { result: AnalysisResult }) {
+  const conf = result.contradictions[0]?.confidence ?? "low";
+  const badgeClass =
+    conf === "high" ? "badge-high" : conf === "medium" ? "badge-medium" : "badge-low";
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function Spinner() {
   return (
-    <svg
-      className="animate-spin h-5 w-5 text-blue-400"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
+    <div
+      className="evidence-card flagged stamp-in p-5 mb-6"
     >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8v8z"
-      />
-    </svg>
+      <p className="eyebrow mb-3">BASIN KİMLİĞİ</p>
+
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h2
+            className="font-display leading-none mb-1"
+            style={{ fontSize: "clamp(2rem, 5vw, 3.25rem)", color: "var(--paper)" }}
+          >
+            {result.person_name}
+          </h2>
+          {result.contradictions.length > 0 && (
+            <p
+              className="font-code"
+              style={{ color: "var(--muted)", fontSize: "0.7rem", letterSpacing: "0.06em" }}
+            >
+              {result.contradictions.length} ÇELİŞKİ TESPİT EDİLDİ
+            </p>
+          )}
+        </div>
+        <span className={`badge ${badgeClass} shrink-0`}>
+          {CONFIDENCE_LABEL[conf] ?? conf} GÜVEN
+        </span>
+      </div>
+    </div>
   );
 }
 
+/** Single contradiction clipping card */
 function ContradictionCard({ c, index }: { c: Contradiction; index: number }) {
+  const conf = c.confidence;
+  const badgeClass =
+    conf === "high" ? "badge-high" : conf === "medium" ? "badge-medium" : "badge-low";
+
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-          Çelişki #{index + 1}
-        </span>
-        <span
-          className={`text-xs font-medium px-2 py-0.5 rounded-full border ${confidenceStyle(c.confidence)}`}
-        >
-          {confidenceLabel(c.confidence)} güven
+    <div
+      className="evidence-card stamp-in mb-4"
+      style={{ animationDelay: `${index * 0.06}s` }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 py-2"
+        style={{ borderBottom: "1px solid var(--border)" }}
+      >
+        <p className="eyebrow">ÇELİŞKİ #{index + 1}</p>
+        <span className={`badge ${badgeClass}`}>
+          {CONFIDENCE_LABEL[conf] ?? conf}
         </span>
       </div>
 
       {/* Summary */}
-      <p className="text-sm text-zinc-300 mb-3">{c.summary}</p>
+      <p
+        className="font-code px-4 py-3"
+        style={{ color: "var(--paper)", fontSize: "0.78rem", lineHeight: 1.7, borderBottom: "1px solid var(--border)" }}
+      >
+        {c.summary}
+      </p>
 
-      {/* Statements */}
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div className="rounded-md border border-zinc-700 bg-zinc-800/60 p-3">
-          <p className="text-xs text-zinc-500 mb-1">{c.date_a}</p>
-          <p className="text-sm text-zinc-200">&ldquo;{c.statement_a}&rdquo;</p>
+      {/* Two-column statements */}
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr]">
+        {/* Old statement */}
+        <div className="p-4" style={{ borderRight: "1px solid var(--border)" }}>
+          <p className="datestamp mb-2">ESKİ BEYAN{c.date_a ? ` · ${c.date_a}` : ""}</p>
+          <p
+            className="font-code"
+            style={{ color: "var(--paper)", fontSize: "0.78rem", lineHeight: 1.7 }}
+          >
+            &ldquo;{c.statement_a}&rdquo;
+          </p>
         </div>
-        <div className="rounded-md border border-zinc-700 bg-zinc-800/60 p-3">
-          <p className="text-xs text-zinc-500 mb-1">{c.date_b}</p>
-          <p className="text-sm text-zinc-200">&ldquo;{c.statement_b}&rdquo;</p>
+
+        {/* Divider symbol */}
+        <div
+          className="flex items-center justify-center px-3 py-4 sm:py-0"
+          style={{ borderBottom: "1px solid var(--border)", fontSize: "1.5rem", color: "var(--accent)", fontWeight: 700 }}
+        >
+          ≠
+        </div>
+
+        {/* New statement */}
+        <div className="p-4">
+          <p className="datestamp mb-2">YENİ BEYAN{c.date_b ? ` · ${c.date_b}` : ""}</p>
+          <p
+            className="font-code"
+            style={{ color: "var(--paper)", fontSize: "0.78rem", lineHeight: 1.7 }}
+          >
+            &ldquo;{c.statement_b}&rdquo;
+          </p>
         </div>
       </div>
 
-      {/* Source */}
+      {/* Source footnote */}
       {c.source_url && (
-        <a
-          href={c.source_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2"
+        <div
+          className="px-4 py-2"
+          style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}
         >
-          Kaynak →
-        </a>
+          <span className="eyebrow" style={{ marginRight: "0.5rem" }}>KAYNAK:</span>
+          <a
+            href={c.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="footnote-link"
+          >
+            {c.source_url}
+          </a>
+        </div>
       )}
     </div>
   );
 }
 
-function ReplyCard({
-  tone,
-  reply,
-}: {
-  tone: string;
-  reply: ReplyContent;
-}) {
+/** Single reply card */
+function ReplyCard({ tone, reply }: { tone: ToneKey; reply: ReplyContent }) {
   const [copied, setCopied] = useState(false);
 
   const textToCopy =
@@ -136,15 +171,13 @@ function ReplyCard({
       ? reply.thread.join("\n\n")
       : reply.tweet_text;
 
-  const copyToClipboard = async () => {
+  const copy = async () => {
     try {
       await navigator.clipboard.writeText(textToCopy);
     } catch {
-      // Fallback for older browsers
       const el = document.createElement("textarea");
       el.value = textToCopy;
-      el.style.position = "absolute";
-      el.style.left = "-9999px";
+      Object.assign(el.style, { position: "absolute", left: "-9999px" });
       document.body.appendChild(el);
       el.select();
       document.execCommand("copy");
@@ -155,293 +188,364 @@ function ReplyCard({
   };
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 flex flex-col gap-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-          {TONE_LABELS[tone] ?? tone}
-        </span>
-        <button
-          onClick={copyToClipboard}
-          className="text-xs px-3 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700"
+    <div className="evidence-card stamp-in flex flex-col">
+      {/* Tone header */}
+      <div
+        className="flex items-center justify-between px-4 py-2"
+        style={{ borderBottom: "1px solid var(--border)" }}
+      >
+        <p
+          className="font-display"
+          style={{ fontSize: "1.25rem", color: "var(--accent)", lineHeight: 1 }}
         >
+          {TONE_LABELS[tone]}
+        </p>
+        <p className="eyebrow">{TONE_DESC[tone]}</p>
+      </div>
+
+      {/* Reply content */}
+      <div className="flex-1 p-4">
+        {tone === "thread" && reply.thread.length > 0 ? (
+          <ol className="flex flex-col gap-3">
+            {reply.thread.map((tweet, i) => (
+              <li
+                key={i}
+                className="font-code"
+                style={{
+                  borderLeft: "2px solid var(--accent)",
+                  paddingLeft: "0.75rem",
+                  fontSize: "0.82rem",
+                  lineHeight: 1.7,
+                  color: "var(--paper)",
+                }}
+              >
+                {tweet}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p
+            className="font-code"
+            style={{ fontSize: "0.9rem", lineHeight: 1.8, color: "var(--paper)" }}
+          >
+            {reply.tweet_text}
+          </p>
+        )}
+      </div>
+
+      {/* Disclaimer + copy */}
+      <div
+        className="flex items-end justify-between gap-3 px-4 py-3"
+        style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}
+      >
+        {reply.disclaimer && (
+          <p className="datestamp flex-1">{reply.disclaimer}</p>
+        )}
+        <button onClick={copy} className={`btn-ghost shrink-0 ${copied ? "copied-flash" : ""}`}>
           {copied ? "Kopyalandı ✓" : "Kopyala"}
         </button>
       </div>
-
-      {/* Content */}
-      {tone === "thread" && reply.thread.length > 0 ? (
-        <ol className="flex flex-col gap-2">
-          {reply.thread.map((tweet, i) => (
-            <li
-              key={i}
-              className="text-sm text-zinc-200 border-l-2 border-zinc-700 pl-3"
-            >
-              {tweet}
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="text-sm text-zinc-200 leading-relaxed">
-          {reply.tweet_text}
-        </p>
-      )}
-
-      {/* Disclaimer */}
-      {reply.disclaimer && (
-        <p className="text-xs text-zinc-500 border-t border-zinc-800 pt-2">
-          {reply.disclaimer}
-        </p>
-      )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main page
-// ---------------------------------------------------------------------------
+/** Source list — footnote style */
+function SourcesList({ sources }: { sources: string[] }) {
+  if (!sources.length) return null;
+  return (
+    <div className="evidence-card stamp-in">
+      <div className="px-4 py-2" style={{ borderBottom: "1px solid var(--border)" }}>
+        <p className="eyebrow">KAYNAKLAR</p>
+      </div>
+      <ol className="px-4 py-3 flex flex-col gap-1.5">
+        {sources.map((url, i) => (
+          <li key={i} className="flex items-baseline gap-2">
+            <span className="datestamp shrink-0">[{i + 1}]</span>
+            <a href={url} target="_blank" rel="noopener noreferrer" className="footnote-link break-all">
+              {url}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 
-type Tones = { cold: boolean; sharp: boolean; thread: boolean };
+// ── Main page ───────────────────────────────────────────────────────────────
+
+type Tones = Record<ToneKey, boolean>;
 
 export default function OppositionPage() {
   const [tweetText, setTweetText] = useState("");
-  const [tones, setTones] = useState<Tones>({
-    cold: true,
-    sharp: true,
-    thread: true,
-  });
+  const [tones, setTones] = useState<Tones>({ cold: true, sharp: true, thread: true });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isWarning, setIsWarning] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
-  const selectedToneList = (
-    Object.entries(tones) as [keyof Tones, boolean][]
-  )
-    .filter(([, v]) => v)
-    .map(([k]) => k);
-
-  const canSubmit =
-    tweetText.trim().length > 0 && selectedToneList.length > 0 && !loading;
+  const selectedTones = TONE_KEYS.filter((k) => tones[k]);
+  const canSubmit = tweetText.trim().length > 0 && selectedTones.length > 0 && !loading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-
     setLoading(true);
     setError(null);
+    setIsWarning(false);
     setResult(null);
 
     try {
-      const data = await runOppositionAnalysis(tweetText, selectedToneList);
+      const data = await runOppositionAnalysis(tweetText, selectedTones);
       setResult(data);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
+        setIsWarning(err.status === 422);
       } else {
         setError("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.");
+        setIsWarning(false);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleTone = (key: keyof Tones) => {
+  const toggleTone = (key: ToneKey) =>
     setTones((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      {/* Page heading */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Muhalif Mod</h1>
-        <p className="text-zinc-400 text-sm">
-          Bir tweet yapıştırın; araç kişiyi araştırır, tutarsızlıkları bulur ve
-          yanıt üretir.
-        </p>
+    <div className="max-w-6xl mx-auto px-4 py-8">
+
+      {/* ── Page header ────────────────────────────────────────────── */}
+      <div className="mb-8 stagger-in">
+        <p className="eyebrow mb-2">ARAŞTIRMA &amp; YANITLAMA</p>
+        <h1
+          className="font-display leading-none"
+          style={{ fontSize: "clamp(2.5rem, 7vw, 5rem)", color: "var(--paper)" }}
+        >
+          MUHALİF MOD
+        </h1>
+        <div className="rule-red mt-3" />
       </div>
 
-      {/* ── Form ──────────────────────────────────────────────────────── */}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        {/* Tweet textarea */}
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="tweet-input"
-            className="text-sm font-medium text-zinc-300"
-          >
-            Tweet metni
-          </label>
-          <textarea
-            id="tweet-input"
-            rows={4}
-            value={tweetText}
-            onChange={(e) => setTweetText(e.target.value)}
-            placeholder="Tweet metnini yapıştırın…"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-blue-500 resize-none transition-colors"
-          />
-        </div>
+      {/* ── Two-column layout ────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-0">
 
-        {/* Tone checkboxes */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-zinc-300">
-            Yanıt tonu
-          </span>
-          <div className="flex flex-col sm:flex-row gap-3">
-            {(Object.keys(TONE_LABELS) as (keyof Tones)[]).map((key) => (
-              <label
-                key={key}
-                className={`flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
-                  tones[key]
-                    ? "border-blue-600 bg-blue-950/30"
-                    : "border-zinc-700 bg-zinc-900 hover:border-zinc-600"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={tones[key]}
-                  onChange={() => toggleTone(key)}
-                  className="mt-0.5 accent-blue-500"
-                />
-                <span className="flex flex-col">
-                  <span className="text-sm font-medium text-zinc-100">
-                    {TONE_LABELS[key]}
-                  </span>
-                  <span className="text-xs text-zinc-500">
-                    {TONE_DESCRIPTIONS[key]}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
-          {selectedToneList.length === 0 && (
-            <p className="text-xs text-yellow-500">
-              En az bir ton seçmelisiniz.
-            </p>
-          )}
-        </div>
-
-        {/* Submit button */}
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 transition-colors text-sm"
+        {/* ── LEFT: Input panel ──────────────────────────────────── */}
+        <div
+          className="lg:border-r py-0 lg:pr-6"
+          style={{ borderColor: "var(--border)" }}
         >
-          {loading ? (
-            <>
-              <Spinner />
-              Araştırılıyor…
-            </>
-          ) : (
-            "Analiz Et"
-          )}
-        </button>
-      </form>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5 stagger-in">
 
-      {/* ── Error banner ─────────────────────────────────────────────── */}
-      {error && (
-        <div className="mt-6 rounded-lg border border-red-700 bg-red-950/40 px-4 py-3">
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
-      )}
+            {/* Tweet textarea */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="tweet-input"
+                className="eyebrow"
+              >
+                Tweet metni
+              </label>
+              <textarea
+                id="tweet-input"
+                rows={5}
+                value={tweetText}
+                onChange={(e) => setTweetText(e.target.value)}
+                placeholder="Tweet metnini buraya yapıştırın…"
+                className="field"
+                style={{ minHeight: "120px" }}
+              />
+            </div>
 
-      {/* ── Results ──────────────────────────────────────────────────── */}
-      {result && (
-        <div className="mt-8 flex flex-col gap-6">
-          {/* Person info card */}
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex-1">
-              <h2 className="text-lg font-bold text-white">
-                {result.person_name || "Kişi tespit edilemedi"}
-              </h2>
-              {result.contradictions.length > 0 && (
-                <p className="text-sm text-zinc-400 mt-0.5">
-                  {result.contradictions.length} çelişki bulundu
+            {/* Tone selector */}
+            <div className="flex flex-col gap-2">
+              <p className="eyebrow">Yanıt tonu</p>
+              <div className="flex flex-col gap-1">
+                {TONE_KEYS.map((key) => (
+                  <label
+                    key={key}
+                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors"
+                    style={{
+                      border: "1px solid",
+                      borderColor: tones[key] ? "var(--accent)" : "var(--border)",
+                      background: tones[key] ? "rgba(232,25,44,0.06)" : "var(--surface)",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={tones[key]}
+                      onChange={() => toggleTone(key)}
+                      className="shrink-0"
+                    />
+                    <span className="flex-1">
+                      <span
+                        className="font-display block"
+                        style={{
+                          fontSize: "1.1rem",
+                          lineHeight: 1,
+                          color: tones[key] ? "var(--accent)" : "var(--paper)",
+                        }}
+                      >
+                        {TONE_LABELS[key]}
+                      </span>
+                      <span className="datestamp">{TONE_DESC[key]}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {selectedTones.length === 0 && (
+                <p className="datestamp" style={{ color: "var(--accent)" }}>
+                  En az bir ton seçmelisiniz.
                 </p>
               )}
             </div>
-            <span
-              className={`self-start sm:self-auto text-xs font-medium px-3 py-1 rounded-full border ${confidenceStyle(
-                result.contradictions[0]?.confidence ?? "low"
-              )}`}
-            >
-              {confidenceLabel(
-                result.contradictions[0]?.confidence ?? "low"
-              )}{" "}
-              güven
-            </span>
-          </div>
 
-          {/* No contradictions */}
-          {result.status === "no_contradictions_found" && (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-5 py-6 text-center">
-              <p className="text-zinc-400 text-sm">
-                Bu tweet için tutarsızlık bulunamadı.
+            {/* Submit button */}
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="btn-primary w-full"
+            >
+              {loading ? (
+                <span className="cursor-blink">Araştırılıyor</span>
+              ) : (
+                "ANALİZ ET →"
+              )}
+            </button>
+
+          </form>
+        </div>
+
+        {/* ── RIGHT: Results panel ───────────────────────────────── */}
+        <div className="lg:pl-6 pt-8 lg:pt-0">
+
+          {/* Loading scan */}
+          {loading && (
+            <div>
+              <p
+                className="eyebrow mb-3 cursor-blink"
+                style={{ color: "var(--accent)" }}
+              >
+                Araştırılıyor
+              </p>
+              <LoadingBar />
+              <LoadingBar />
+              <LoadingBar />
+            </div>
+          )}
+
+          {/* Error / Warning banner */}
+          {error && !loading && (
+            <div
+              className="stamp-in mb-6 px-4 py-3 flex items-start gap-3"
+              style={{
+                border: `1px solid ${isWarning ? "rgba(245,158,11,0.4)" : "rgba(239,68,68,0.4)"}`,
+                background: isWarning ? "rgba(245,158,11,0.06)" : "rgba(239,68,68,0.06)",
+              }}
+            >
+              <span style={{ color: isWarning ? "#fbbf24" : "#fca5a5", marginTop: "1px" }}>
+                {isWarning ? "⚠" : "✕"}
+              </span>
+              <p
+                className="font-code"
+                style={{
+                  color: isWarning ? "#fbbf24" : "#fca5a5",
+                  fontSize: "0.78rem",
+                  lineHeight: 1.6,
+                }}
+              >
+                {error}
               </p>
             </div>
           )}
 
-          {/* Contradictions list */}
-          {result.contradictions.length > 0 && (
-            <section>
-              <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-                Tespit Edilen Çelişkiler
-              </h3>
-              <div className="flex flex-col gap-3">
-                {result.contradictions.map((c, i) => (
-                  <ContradictionCard key={i} c={c} index={i} />
-                ))}
-              </div>
-            </section>
+          {/* Empty state */}
+          {!loading && !error && !result && (
+            <div
+              className="flex items-center justify-center"
+              style={{ minHeight: "200px" }}
+            >
+              <p
+                className="font-code cursor-blink"
+                style={{ color: "var(--muted)", fontSize: "0.78rem", letterSpacing: "0.06em" }}
+              >
+                ANALİZ BEKLENİYOR
+              </p>
+            </div>
           )}
 
-          {/* Reply cards */}
-          {(["cold", "sharp", "thread"] as const).some(
-            (t) => result.replies[t] !== null
-          ) && (
-            <section>
-              <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-                Üretilen Yanıtlar
-              </h3>
-              <div className="flex flex-col gap-3">
-                {(["cold", "sharp", "thread"] as const).map((tone) => {
-                  const reply = result.replies[tone];
-                  if (!reply) return null;
-                  return <ReplyCard key={tone} tone={tone} reply={reply} />;
-                })}
-              </div>
-              {(["cold", "sharp", "thread"] as const).every(
-                (t) => result.replies[t] === null
-              ) && (
-                <p className="text-sm text-zinc-500 text-center py-4">
-                  Tüm yanıtlar hukuki güvenlik filtresi tarafından engellendi.
-                </p>
+          {/* Results */}
+          {result && !loading && (
+            <div className="flex flex-col gap-8">
+
+              {/* Person badge */}
+              <PersonBadge result={result} />
+
+              {/* No contradictions */}
+              {result.status === "no_contradictions_found" && (
+                <div
+                  className="evidence-card stamp-in px-5 py-6 text-center"
+                >
+                  <p className="font-display" style={{ fontSize: "1.5rem", color: "var(--muted)" }}>
+                    ÇELİŞKİ BULUNAMADI
+                  </p>
+                  <p className="font-code mt-2" style={{ color: "var(--muted)", fontSize: "0.73rem" }}>
+                    Bu tweet için geçmişte tutarsız bir beyan tespit edilemedi.
+                  </p>
+                </div>
               )}
-            </section>
+
+              {/* Contradictions */}
+              {result.contradictions.length > 0 && (
+                <section>
+                  <p className="eyebrow mb-4">
+                    TESPİT EDİLEN ÇELİŞKİLER — {result.contradictions.length} KAYIT
+                  </p>
+                  {result.contradictions.map((c, i) => (
+                    <ContradictionCard key={i} c={c} index={i} />
+                  ))}
+                </section>
+              )}
+
+              {/* Replies */}
+              {TONE_KEYS.some((t) => result.replies[t] !== null) && (
+                <section>
+                  <p className="eyebrow mb-4">ÜRETİLEN YANITLAR</p>
+                  <div className="grid grid-cols-1 xl:grid-cols-3 gap-0">
+                    {TONE_KEYS.map((tone, i) => {
+                      const reply = result.replies[tone];
+                      if (!reply) return null;
+                      return (
+                        <div
+                          key={tone}
+                          style={{
+                            borderRight: i < TONE_KEYS.length - 1 ? "1px solid var(--border)" : undefined,
+                          }}
+                        >
+                          <ReplyCard tone={tone} reply={reply} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {TONE_KEYS.every((t) => result.replies[t] === null) && (
+                    <p
+                      className="font-code text-center py-6"
+                      style={{ color: "var(--muted)", fontSize: "0.73rem" }}
+                    >
+                      Tüm yanıtlar hukuki güvenlik filtresi tarafından engellendi.
+                    </p>
+                  )}
+                </section>
+              )}
+
+              {/* Sources */}
+              <SourcesList sources={result.sources} />
+
+            </div>
           )}
 
-          {/* Sources */}
-          {result.sources.length > 0 && (
-            <section>
-              <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-                Kaynaklar
-              </h3>
-              <ul className="flex flex-col gap-1">
-                {result.sources.map((url, i) => (
-                  <li key={i}>
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all"
-                    >
-                      {url}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

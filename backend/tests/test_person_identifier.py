@@ -3,13 +3,13 @@ Tests for services/person_identifier.py
 
 Coverage
 --------
-- Happy path: Claude returns clean JSON → PersonIdentification returned
-- Fenced JSON: Claude wraps output in ```json … ``` → still parsed
-- Unidentified person: name is null, confidence is "low"
-- Unknown confidence value: normalised to "low"
-- Empty name/handle: coerced to None
-- Bad JSON from Claude: PersonIdentifierError raised
-- Claude API error: PersonIdentifierError raised
+- Happy path: Gemini returns clean JSON → PersonIdentification returned
+- Fenced JSON: Gemini wraps output in ```json … ``` → still parsed
+- Unidentified person: confidence='low', name=None → PersonNotFoundError raised
+- Unknown confidence value: normalised to "low"; name present → result returned
+- Empty name/handle with confidence=low → PersonNotFoundError raised
+- Bad JSON from Gemini: PersonIdentifierError raised
+- Gemini API error: PersonIdentifierError raised
 - Missing API key: EnvironmentError raised
 - Missing system prompt file: FileNotFoundError raised
 """
@@ -24,6 +24,7 @@ import pytest
 
 from services.person_identifier import (
     PersonIdentifierError,
+    PersonNotFoundError,
     _parse_claude_json,
     identify_person,
 )
@@ -34,34 +35,29 @@ from services.person_identifier import (
 # ---------------------------------------------------------------------------
 
 
-def _make_claude_response(text: str):
-    """Build a minimal mock that looks like an anthropic.Message."""
-    content_block = MagicMock()
-    content_block.text = text
-    message = MagicMock()
-    message.content = [content_block]
-    return message
+def _make_gemini_response(text: str) -> MagicMock:
+    """Build a minimal mock that looks like a Gemini GenerateContentResponse."""
+    response = MagicMock()
+    response.text = text
+    return response
 
 
-def _mock_claude(monkeypatch: pytest.MonkeyPatch, response_text: str) -> AsyncMock:
+def _mock_gemini(monkeypatch: pytest.MonkeyPatch, response_text: str) -> AsyncMock:
     """
-    Patch anthropic.AsyncAnthropic so messages.create returns a mock message.
+    Patch genai.Client so aio.models.generate_content returns a mock response.
     Returns the AsyncMock so callers can inspect call args.
     """
-    create_mock = AsyncMock(return_value=_make_claude_response(response_text))
-
-    mock_messages = MagicMock()
-    mock_messages.create = create_mock
+    generate_mock = AsyncMock(return_value=_make_gemini_response(response_text))
 
     mock_client = MagicMock()
-    mock_client.messages = mock_messages
+    mock_client.aio.models.generate_content = generate_mock
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(
-        "services.person_identifier.anthropic.AsyncAnthropic",
+        "services.person_identifier.genai.Client",
         lambda **kwargs: mock_client,
     )
-    return create_mock
+    return generate_mock
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +96,8 @@ def test_parse_invalid_json_raises() -> None:
 
 
 async def test_identify_person_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Returns correct PersonIdentification when Claude responds with clean JSON."""
-    create_mock = _mock_claude(
+    """Returns correct PersonIdentification when Gemini responds with clean JSON."""
+    generate_mock = _mock_gemini(
         monkeypatch,
         '{"name": "Ahmet Yılmaz", "handle": "ahmetyilmaz", "topic": "enflasyon politikası", "confidence": "high"}',
     )
@@ -113,13 +109,13 @@ async def test_identify_person_success(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["topic"] == "enflasyon politikası"
     assert result["confidence"] == "high"
 
-    # Verify Claude was called once
-    create_mock.assert_awaited_once()
+    # Verify Gemini was called once
+    generate_mock.assert_awaited_once()
 
 
 async def test_identify_person_fenced_response(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Parses correctly when Claude wraps JSON in markdown code fences."""
-    _mock_claude(
+    """Parses correctly when Gemini wraps JSON in markdown code fences."""
+    _mock_gemini(
         monkeypatch,
         '```json\n{"name": "Mehmet Çelik", "handle": null, "topic": "bütçe açığı", "confidence": "medium"}\n```',
     )
@@ -132,35 +128,30 @@ async def test_identify_person_fenced_response(monkeypatch: pytest.MonkeyPatch) 
 
 
 # ---------------------------------------------------------------------------
-# identify_person — unidentified person
+# identify_person — unidentified person → PersonNotFoundError
 # ---------------------------------------------------------------------------
 
 
 async def test_identify_person_unidentified(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Returns name=None, confidence='low' when Claude cannot identify the person."""
-    _mock_claude(
+    """Raises PersonNotFoundError when Gemini cannot identify the person (confidence=low, name=None)."""
+    _mock_gemini(
         monkeypatch,
         '{"name": null, "handle": null, "topic": "genel siyaset", "confidence": "low"}',
     )
 
-    result = await identify_person("Bu adam her şeyi biliyor sanki.")
-
-    assert result["name"] is None
-    assert result["handle"] is None
-    assert result["confidence"] == "low"
+    with pytest.raises(PersonNotFoundError):
+        await identify_person("Bu adam her şeyi biliyor sanki.")
 
 
 async def test_identify_person_empty_name_coerced_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Empty string name/handle are coerced to None."""
-    _mock_claude(
+    """Empty string name with confidence=low raises PersonNotFoundError (empty → None, low+None → error)."""
+    _mock_gemini(
         monkeypatch,
         '{"name": "", "handle": "", "topic": "bilinmiyor", "confidence": "low"}',
     )
 
-    result = await identify_person("Bilinmeyen biri bir şey söyledi.")
-
-    assert result["name"] is None
-    assert result["handle"] is None
+    with pytest.raises(PersonNotFoundError):
+        await identify_person("Bilinmeyen biri bir şey söyledi.")
 
 
 # ---------------------------------------------------------------------------
@@ -169,13 +160,15 @@ async def test_identify_person_empty_name_coerced_to_none(monkeypatch: pytest.Mo
 
 
 async def test_identify_person_unknown_confidence_normalised(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An unrecognised confidence value is normalised to 'low'."""
-    _mock_claude(
+    """An unrecognised confidence value is normalised to 'low'; name present → result returned."""
+    _mock_gemini(
         monkeypatch,
-        '{"name": "Test", "handle": null, "topic": "test konusu", "confidence": "very_high"}',
+        '{"name": "Test Kişisi", "handle": null, "topic": "test konusu", "confidence": "very_high"}',
     )
 
+    # name is not None, so PersonNotFoundError is NOT raised despite confidence='low'
     result = await identify_person("Test tweet")
+    assert result["name"] == "Test Kişisi"
     assert result["confidence"] == "low"
 
 
@@ -185,43 +178,35 @@ async def test_identify_person_unknown_confidence_normalised(monkeypatch: pytest
 
 
 async def test_identify_person_bad_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Raises PersonIdentifierError when Claude returns unparseable output."""
-    _mock_claude(monkeypatch, "Üzgünüm, bunu yapamam.")
+    """Raises PersonIdentifierError when Gemini returns unparseable output."""
+    _mock_gemini(monkeypatch, "Üzgünüm, bunu yapamam.")
 
     with pytest.raises(PersonIdentifierError, match="parse JSON"):
         await identify_person("Test tweet")
 
 
 async def test_identify_person_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Raises PersonIdentifierError when the Anthropic API call fails."""
-    import httpx
-    import anthropic as _anthropic
+    """Raises PersonIdentifierError when the Gemini API call fails."""
+    generate_mock = AsyncMock(side_effect=Exception("quota exceeded"))
 
-    fake_request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-    create_mock = AsyncMock(
-        side_effect=_anthropic.APIError("rate limit exceeded", fake_request, body={})
-    )
-
-    mock_messages = MagicMock()
-    mock_messages.create = create_mock
     mock_client = MagicMock()
-    mock_client.messages = mock_messages
+    mock_client.aio.models.generate_content = generate_mock
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(
-        "services.person_identifier.anthropic.AsyncAnthropic",
+        "services.person_identifier.genai.Client",
         lambda **kwargs: mock_client,
     )
 
-    with pytest.raises(PersonIdentifierError, match="Claude API error"):
+    with pytest.raises(PersonIdentifierError, match="Gemini API error"):
         await identify_person("Test tweet")
 
 
 async def test_identify_person_missing_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Raises EnvironmentError when ANTHROPIC_API_KEY is not set."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    """Raises EnvironmentError when GEMINI_API_KEY is not set."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
-    with pytest.raises(EnvironmentError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(EnvironmentError, match="GEMINI_API_KEY"):
         await identify_person("Test tweet")
 
 
@@ -229,8 +214,8 @@ async def test_identify_person_missing_prompt_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Raises FileNotFoundError when the system prompt file is missing."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    # Redirect PROMPTS_DIR to an empty temp directory
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    # Redirect _PROMPTS_DIR to an empty temp directory
     monkeypatch.setattr("services.person_identifier._PROMPTS_DIR", tmp_path)
 
     with pytest.raises(FileNotFoundError, match="person_identifier.txt"):

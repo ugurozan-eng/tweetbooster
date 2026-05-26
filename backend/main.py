@@ -3,16 +3,34 @@ TwitBoost — FastAPI Backend
 Phase 2: Auth + usage limits added on top of Phase 1 pipeline.
 """
 
+import logging
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
+# ---------------------------------------------------------------------------
+# Startup / shutdown lifecycle
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Log warnings for critical missing env vars at startup."""
+    if not os.environ.get("GEMINI_API_KEY"):
+        logging.warning("[startup] GEMINI_API_KEY is not set. AI features will not work.")
+    yield
+
+
 app = FastAPI(
     title="TwitBoost API",
     description="AI-powered Twitter reply tool — Opposition & Niche modes",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # ---------------------------------------------------------------------------

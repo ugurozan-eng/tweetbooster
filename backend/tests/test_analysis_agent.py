@@ -7,10 +7,10 @@ Coverage
 - No contradictions: overall_confidence='low' + empty list → early-exit status
 - Legal filter blocks one reply (sharp) — others still returned
 - All replies blocked by filter → replies all null, status still 'ok'
-- Partial tone failure: one Claude API call raises → that tone is None
-- Missing ANTHROPIC_API_KEY → EnvironmentError raised before any Claude call
+- Partial tone failure: one Gemini API call raises → that tone is None
+- Missing GEMINI_API_KEY → EnvironmentError raised before any Gemini call
 - Missing prompt file → AnalysisAgentError (propagated from stage 2)
-- Analysis Claude call times out → AnalysisTimeoutError raised
+- Analysis Gemini call times out → AnalysisTimeoutError raised
 - Helper functions: _format_sources_for_analysis, _parse_json_response
 """
 
@@ -21,7 +21,6 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call
 
-import httpx
 import pytest
 
 import services.analysis_agent as aa
@@ -102,21 +101,19 @@ _NO_CONTRADICTION_JSON = json.dumps({
 # ---------------------------------------------------------------------------
 
 
-def _make_message(text: str) -> MagicMock:
-    """Build a minimal mock anthropic.Message."""
-    block = MagicMock()
-    block.text = text
-    msg = MagicMock()
-    msg.content = [block]
-    return msg
+def _make_response(text: str) -> MagicMock:
+    """Build a minimal mock that looks like a Gemini GenerateContentResponse."""
+    response = MagicMock()
+    response.text = text
+    return response
 
 
 def _mock_client(call_responses: list[str]) -> MagicMock:
     """
-    Return a mock AsyncAnthropic client whose messages.create returns
+    Return a mock genai.Client whose aio.models.generate_content returns
     each response in order of calls.
     """
-    responses = [_make_message(r) for r in call_responses]
+    responses = [_make_response(r) for r in call_responses]
     idx = 0
 
     async def _create(*args, **kwargs):
@@ -125,10 +122,8 @@ def _mock_client(call_responses: list[str]) -> MagicMock:
         idx += 1
         return r
 
-    messages_mock = MagicMock()
-    messages_mock.create = AsyncMock(side_effect=_create)
     client = MagicMock()
-    client.messages = messages_mock
+    client.aio.models.generate_content = AsyncMock(side_effect=_create)
     return client
 
 
@@ -191,12 +186,12 @@ def test_format_sources_empty() -> None:
 
 async def test_run_analysis_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """All 3 tones generate clean replies → status='ok', all replies present."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     mock_client = _mock_client(
         [_ANALYSIS_JSON, _REPLY_JSON, _REPLY_JSON, _THREAD_REPLY_JSON]
     )
     monkeypatch.setattr(
-        "services.analysis_agent.anthropic.AsyncAnthropic",
+        "services.analysis_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -210,8 +205,8 @@ async def test_run_analysis_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["replies"]["cold"] is not None
     assert result["replies"]["sharp"] is not None
     assert result["replies"]["thread"] is not None
-    # Claude was called 4 times (1 analysis + 3 replies)
-    assert mock_client.messages.create.await_count == 4
+    # Gemini was called 4 times (1 analysis + 3 replies)
+    assert mock_client.aio.models.generate_content.await_count == 4
 
 
 # ---------------------------------------------------------------------------
@@ -221,10 +216,10 @@ async def test_run_analysis_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_run_analysis_no_contradictions(monkeypatch: pytest.MonkeyPatch) -> None:
     """overall_confidence='low' + empty contradictions → early exit, no reply calls."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     mock_client = _mock_client([_NO_CONTRADICTION_JSON])
     monkeypatch.setattr(
-        "services.analysis_agent.anthropic.AsyncAnthropic",
+        "services.analysis_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -233,8 +228,8 @@ async def test_run_analysis_no_contradictions(monkeypatch: pytest.MonkeyPatch) -
     assert result["status"] == "no_contradictions_found"
     assert result["contradictions"] == []
     assert all(v is None for v in result["replies"].values())
-    # Only 1 Claude call (the analysis); no reply generation
-    assert mock_client.messages.create.await_count == 1
+    # Only 1 Gemini call (the analysis); no reply generation
+    assert mock_client.aio.models.generate_content.await_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -244,7 +239,7 @@ async def test_run_analysis_no_contradictions(monkeypatch: pytest.MonkeyPatch) -
 
 async def test_run_analysis_legal_filter_blocks_sharp(monkeypatch: pytest.MonkeyPatch) -> None:
     """Sharp reply contains profanity → blocked (None); cold and thread still returned."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     dirty_reply = json.dumps({
         "tweet_text": "Bu orospu çocuğu yalan söylüyor.",   # PROFANITY → blocked
@@ -257,7 +252,7 @@ async def test_run_analysis_legal_filter_blocks_sharp(monkeypatch: pytest.Monkey
         [_ANALYSIS_JSON, _REPLY_JSON, dirty_reply, _THREAD_REPLY_JSON]
     )
     monkeypatch.setattr(
-        "services.analysis_agent.anthropic.AsyncAnthropic",
+        "services.analysis_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -276,7 +271,7 @@ async def test_run_analysis_legal_filter_blocks_sharp(monkeypatch: pytest.Monkey
 
 async def test_run_analysis_all_replies_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
     """All 3 replies fail the filter → all None, but status is still 'ok'."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     dirty = json.dumps({
         "tweet_text": "Bu adam bir hırsızdır.",   # ACCUSATION → blocked
@@ -287,7 +282,7 @@ async def test_run_analysis_all_replies_blocked(monkeypatch: pytest.MonkeyPatch)
 
     mock_client = _mock_client([_ANALYSIS_JSON, dirty, dirty, dirty])
     monkeypatch.setattr(
-        "services.analysis_agent.anthropic.AsyncAnthropic",
+        "services.analysis_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -298,38 +293,33 @@ async def test_run_analysis_all_replies_blocked(monkeypatch: pytest.MonkeyPatch)
 
 
 # ---------------------------------------------------------------------------
-# run_analysis — partial tone failure (one Claude call raises)
+# run_analysis — partial tone failure (one Gemini call raises)
 # ---------------------------------------------------------------------------
 
 
 async def test_run_analysis_one_tone_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """If one reply-generator Claude call raises, that tone is None; others succeed."""
-    import anthropic as _anthropic
-
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    """If one reply-generator Gemini call raises, that tone is None; others succeed."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     call_count = 0
-    fake_request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
 
     async def _create_side_effect(*args, **kwargs):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            return _make_message(_ANALYSIS_JSON)
+            return _make_response(_ANALYSIS_JSON)
         elif call_count == 2:
-            return _make_message(_REPLY_JSON)      # cold — OK
+            return _make_response(_REPLY_JSON)      # cold — OK
         elif call_count == 3:
-            raise _anthropic.APIError("rate limit", fake_request, body={})  # sharp — fail
+            raise Exception("quota exceeded")       # sharp — fail
         else:
-            return _make_message(_THREAD_REPLY_JSON)  # thread — OK
+            return _make_response(_THREAD_REPLY_JSON)  # thread — OK
 
-    messages_mock = MagicMock()
-    messages_mock.create = AsyncMock(side_effect=_create_side_effect)
     mock_client = MagicMock()
-    mock_client.messages = messages_mock
+    mock_client.aio.models.generate_content = AsyncMock(side_effect=_create_side_effect)
 
     monkeypatch.setattr(
-        "services.analysis_agent.anthropic.AsyncAnthropic",
+        "services.analysis_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -346,10 +336,10 @@ async def test_run_analysis_one_tone_api_error(monkeypatch: pytest.MonkeyPatch) 
 
 
 async def test_run_analysis_missing_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """EnvironmentError raised immediately when ANTHROPIC_API_KEY is absent."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    """EnvironmentError raised immediately when GEMINI_API_KEY is absent."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
-    with pytest.raises(EnvironmentError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(EnvironmentError, match="GEMINI_API_KEY"):
         await run_analysis("Test.", _SAMPLE_SOURCES)  # type: ignore[arg-type]
 
 
@@ -359,11 +349,11 @@ async def test_run_analysis_missing_api_key(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 async def test_run_analysis_single_tone(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Requesting only 'cold' generates exactly 2 Claude calls (1 analysis + 1 reply)."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    """Requesting only 'cold' generates exactly 2 Gemini calls (1 analysis + 1 reply)."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     mock_client = _mock_client([_ANALYSIS_JSON, _REPLY_JSON])
     monkeypatch.setattr(
-        "services.analysis_agent.anthropic.AsyncAnthropic",
+        "services.analysis_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 
@@ -373,26 +363,24 @@ async def test_run_analysis_single_tone(monkeypatch: pytest.MonkeyPatch) -> None
     # sharp and thread were not requested → remain None (default)
     assert result["replies"]["sharp"] is None
     assert result["replies"]["thread"] is None
-    assert mock_client.messages.create.await_count == 2
+    assert mock_client.aio.models.generate_content.await_count == 2
 
 
 # ---------------------------------------------------------------------------
-# run_analysis — Claude analysis call times out
+# run_analysis — Gemini analysis call times out
 # ---------------------------------------------------------------------------
 
 
 async def test_run_analysis_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    """asyncio.TimeoutError during the analysis Claude call → AnalysisTimeoutError."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    """asyncio.TimeoutError during the analysis Gemini call → AnalysisTimeoutError."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
-    # Make the analysis Claude call raise TimeoutError (simulates asyncio.wait_for timeout)
-    messages_mock = MagicMock()
-    messages_mock.create = AsyncMock(side_effect=asyncio.TimeoutError())
+    # Make the analysis Gemini call raise TimeoutError (simulates asyncio.wait_for timeout)
     mock_client = MagicMock()
-    mock_client.messages = messages_mock
+    mock_client.aio.models.generate_content = AsyncMock(side_effect=asyncio.TimeoutError())
 
     monkeypatch.setattr(
-        "services.analysis_agent.anthropic.AsyncAnthropic",
+        "services.analysis_agent.genai.Client",
         lambda **kwargs: mock_client,
     )
 

@@ -10,15 +10,13 @@ import {
   ApiError,
 } from "@/lib/api";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const NICHES = [
-  { id: "food", label: "Yemek & Tarif", emoji: "🍳" },
-  { id: "football", label: "Futbol", emoji: "⚽" },
-  { id: "economy", label: "Ekonomi & Finans", emoji: "📈" },
-  { id: "politics", label: "Siyaset", emoji: "🏛" },
+  { id: "food",     label: "YEMEK"    },
+  { id: "football", label: "FUTBOL"   },
+  { id: "economy",  label: "EKONOMİ"  },
+  { id: "politics", label: "SİYASET"  },
 ] as const;
 
 type NicheId = (typeof NICHES)[number]["id"];
@@ -29,63 +27,24 @@ const HOURS_OPTIONS = [
   { value: 6, label: "Son 6 saat" },
 ];
 
-const HOOK_TYPE_STYLES: Record<string, string> = {
-  question: "bg-blue-900/40 text-blue-400 border-blue-700",
-  opinion: "bg-violet-900/40 text-violet-400 border-violet-700",
-  fact: "bg-emerald-900/40 text-emerald-400 border-emerald-700",
+const HOOK_LABELS: Record<string, string> = {
+  question: "SORU",
+  opinion:  "GÖRÜŞ",
+  fact:     "BİLGİ",
 };
 
-const HOOK_TYPE_LABELS: Record<string, string> = {
-  question: "Soru",
-  opinion: "Görüş",
-  fact: "Bilgi",
+const HOOK_BADGE: Record<string, string> = {
+  question: "badge badge-medium",
+  opinion:  "badge badge-accent",
+  fact:     "badge badge-high",
 };
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ── Reply card ────────────────────────────────────────────────────────────────
 
-function scoreBadgeStyle(score: number): string {
-  if (score >= 7) return "bg-green-900/40 text-green-400 border-green-700";
-  if (score >= 4) return "bg-yellow-900/40 text-yellow-400 border-yellow-700";
-  return "bg-red-900/40 text-red-400 border-red-700";
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function Spinner({ size = "md" }: { size?: "sm" | "md" }) {
-  const cls = size === "sm" ? "h-4 w-4" : "h-5 w-5";
-  return (
-    <svg
-      className={`animate-spin ${cls} text-blue-400`}
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8v8z"
-      />
-    </svg>
-  );
-}
-
-function NicheReplyCard({ reply }: { reply: NicheReply }) {
+function ReplyCard({ reply, index }: { reply: NicheReply; index: number }) {
   const [copied, setCopied] = useState(false);
 
-  const copyToClipboard = async () => {
+  const copy = async () => {
     try {
       await navigator.clipboard.writeText(reply.text);
     } catch {
@@ -102,286 +61,368 @@ function NicheReplyCard({ reply }: { reply: NicheReply }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const hookStyle =
-    HOOK_TYPE_STYLES[reply.hook_type] ??
-    "bg-zinc-800 text-zinc-400 border-zinc-700";
-  const hookLabel = HOOK_TYPE_LABELS[reply.hook_type] ?? reply.hook_type;
+  const hookClass = HOOK_BADGE[reply.hook_type] ?? "badge badge-medium";
+  const hookLabel = HOOK_LABELS[reply.hook_type] ?? reply.hook_type.toUpperCase();
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 px-4 py-3 flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className={`text-xs font-medium px-2 py-0.5 rounded-full border ${hookStyle}`}
-        >
-          {hookLabel}
-        </span>
+    <div
+      className="evidence-card stamp-in flex flex-col gap-3 p-4"
+      style={{ minHeight: "160px" }}
+    >
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <p className="eyebrow">YANIT {index + 1}</p>
+          <span className={hookClass}>{hookLabel}</span>
+        </div>
         <button
-          onClick={copyToClipboard}
-          className="text-xs px-2.5 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300 hover:text-white transition-colors"
+          onClick={copy}
+          className="btn-ghost"
+          style={{
+            fontSize: "0.65rem",
+            padding: "0.25rem 0.625rem",
+            color: copied ? "#6ee7b7" : undefined,
+            borderColor: copied ? "#6ee7b7" : undefined,
+          }}
         >
-          {copied ? "Kopyalandı ✓" : "Kopyala"}
+          {copied ? "KOPYALANDI ✓" : "KOPYALA"}
         </button>
       </div>
-      <p className="text-sm text-zinc-200 leading-relaxed">{reply.text}</p>
-      <p className="text-xs text-zinc-600 text-right">
-        {reply.text.length} karakter
+
+      {/* Reply text */}
+      <p
+        className="font-code flex-1"
+        style={{ color: "var(--paper)", fontSize: "0.8rem", lineHeight: 1.75 }}
+      >
+        {reply.text}
       </p>
+
+      {/* Char count */}
+      <p className="datestamp text-right">{reply.text.length} karakter</p>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Tweet row — handles its own reply state
-// ---------------------------------------------------------------------------
+// ── Tweet row ─────────────────────────────────────────────────────────────────
 
-type TweetReplyState = {
+type ReplyState = {
   loading: boolean;
   error: string | null;
   replies: NicheReply[] | null;
 };
 
-function TweetRow({
-  tweet,
-  nicheId,
-}: {
-  tweet: ScoredTweet;
-  nicheId: NicheId;
-}) {
-  const [state, setState] = useState<TweetReplyState>({
+function TweetRow({ tweet, nicheId }: { tweet: ScoredTweet; nicheId: NicheId }) {
+  const [state, setState] = useState<ReplyState>({
     loading: false,
     error: null,
     replies: null,
   });
 
-  const handleGenerateReply = async () => {
+  const generate = async () => {
     setState({ loading: true, error: null, replies: null });
     try {
       const data = await generateNicheReply(tweet.text, nicheId);
       setState({ loading: false, error: null, replies: data.replies });
     } catch (err) {
       const message =
-        err instanceof ApiError
-          ? err.message
-          : "Yanıt üretilirken bir hata oluştu.";
+        err instanceof ApiError ? err.message : "Yanıt üretilirken hata oluştu.";
       setState({ loading: false, error: message, replies: null });
     }
   };
 
   return (
-    <li className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 flex flex-col gap-3">
-      {/* Tweet header row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-zinc-200 leading-relaxed line-clamp-3">
-            {tweet.text}
-          </p>
-          <p className="text-xs text-zinc-500 mt-1.5 italic">{tweet.reason}</p>
+    <div className="evidence-card" style={{ background: "var(--surface)" }}>
+      {/* ── Main row ────────────────────────────────────────────────── */}
+      <div
+        className="grid items-start gap-4 p-4"
+        style={{ gridTemplateColumns: "3.5rem 1fr auto" }}
+      >
+        {/* Score column */}
+        <div className="flex flex-col items-center pt-0.5 shrink-0">
+          <span
+            className="font-display leading-none"
+            style={{ fontSize: "2.5rem", color: "var(--accent)" }}
+          >
+            {tweet.score}
+          </span>
+          <span className="eyebrow" style={{ fontSize: "0.5rem" }}>/10</span>
         </div>
 
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          {/* Score badge */}
-          <span
-            className={`text-xs font-bold px-2.5 py-1 rounded-full border ${scoreBadgeStyle(tweet.score)}`}
+        {/* Tweet text column */}
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <p
+            className="font-code"
+            style={{ color: "var(--paper)", fontSize: "0.8125rem", lineHeight: 1.7 }}
           >
-            {tweet.score}/10
-          </span>
-
-          {/* Tweet link */}
+            {tweet.text}
+          </p>
+          {tweet.reason && (
+            <p className="eyebrow" style={{ letterSpacing: "0.06em" }}>
+              {tweet.reason}
+            </p>
+          )}
           {tweet.url && (
             <a
               href={tweet.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2"
+              className="footnote-link"
+              style={{ width: "fit-content" }}
             >
-              Tweet →
+              TWEET → KAYNAK
             </a>
           )}
         </div>
+
+        {/* Action column */}
+        <div className="shrink-0 pt-0.5">
+          <button
+            onClick={generate}
+            disabled={state.loading}
+            className="btn-ghost"
+            style={{ whiteSpace: "nowrap" }}
+          >
+            {state.loading ? (
+              <span className="cursor-blink" style={{ fontSize: "0.65rem" }}>
+                ÜRET
+              </span>
+            ) : state.replies ? (
+              "YENİDEN →"
+            ) : (
+              "YANIT ÜRET →"
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Yanıt Üret button */}
-      <button
-        onClick={handleGenerateReply}
-        disabled={state.loading}
-        className="self-start flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-300 hover:text-white transition-colors border border-zinc-700"
-      >
-        {state.loading ? (
-          <>
-            <Spinner size="sm" />
-            Üretiliyor…
-          </>
-        ) : state.replies ? (
-          "Yeniden Üret"
-        ) : (
-          "Yanıt Üret"
-        )}
-      </button>
-
-      {/* Inline error */}
+      {/* ── Inline error ───────────────────────────────────────────── */}
       {state.error && (
-        <p className="text-xs text-red-400 border border-red-800 bg-red-950/30 rounded px-3 py-2">
+        <div
+          className="mx-4 mb-4 px-3 py-2 font-code"
+          style={{
+            border: "1px solid var(--accent)",
+            background: "rgba(232,25,44,0.07)",
+            color: "var(--accent)",
+            fontSize: "0.75rem",
+          }}
+        >
           {state.error}
-        </p>
-      )}
-
-      {/* Generated replies */}
-      {state.replies && state.replies.length > 0 && (
-        <div className="flex flex-col gap-2 pt-1">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-            Yanıt Seçenekleri
-          </p>
-          {state.replies.map((reply, i) => (
-            <NicheReplyCard key={i} reply={reply} />
-          ))}
         </div>
       )}
-    </li>
+
+      {/* ── Replies panel ──────────────────────────────────────────── */}
+      {state.replies && state.replies.length > 0 && (
+        <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
+          <div className="p-4">
+            <div className="rule-red mb-4" />
+            <p className="eyebrow mb-3">YANIT SEÇENEKLERİ</p>
+            <div
+              className="grid gap-3"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}
+            >
+              {state.replies.map((r, i) => (
+                <ReplyCard key={i} reply={r} index={i} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main page
-// ---------------------------------------------------------------------------
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function NichePage() {
-  const [nicheId, setNicheId] = useState<NicheId>("food");
-  const [hours, setHours] = useState<number>(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [trendingResult, setTrendingResult] = useState<TrendingResult | null>(
-    null
-  );
+  const [nicheId, setNicheId]       = useState<NicheId>("food");
+  const [hours, setHours]           = useState<number>(1);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+  const [result, setResult]         = useState<TrendingResult | null>(null);
 
-  const handleFetchTrending = async () => {
+  const fetchTrending = async () => {
     setLoading(true);
     setError(null);
-    setTrendingResult(null);
-
+    setResult(null);
     try {
       const data = await getNicheTrending(nicheId, hours);
-      setTrendingResult(data);
+      setResult(data);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Tweetler getirilirken bir hata oluştu. Lütfen tekrar deneyin.");
-      }
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Tweetler getirilirken hata oluştu. Lütfen tekrar deneyin."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      {/* Page heading */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Niş Mod</h1>
-        <p className="text-zinc-400 text-sm">
-          Nişinizi seçin, trend tweetleri getirin ve etkileşim yanıtları üretin.
-        </p>
-      </div>
+    <div className="min-h-[calc(100vh-5rem)] px-4 py-12 max-w-6xl mx-auto">
+      <div className="stagger-in">
 
-      {/* ── Controls ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-5">
-        {/* Niche selector */}
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-zinc-300">Niş seçin</span>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {NICHES.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => setNicheId(n.id)}
-                className={`rounded-lg border px-3 py-3 text-sm font-medium transition-colors flex flex-col items-center gap-1 ${
-                  nicheId === n.id
-                    ? "border-emerald-600 bg-emerald-950/30 text-emerald-300"
-                    : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-600 hover:text-white"
-                }`}
-              >
-                <span className="text-xl" role="img" aria-label={n.label}>
-                  {n.emoji}
-                </span>
-                <span className="text-xs leading-tight text-center">
-                  {n.label}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* ── Eyebrow ──────────────────────────────────────────────── */}
+        <p className="eyebrow mb-4">MOD 02 · Niş Trend Analizi</p>
 
-        {/* Hours selector */}
-        <div className="flex flex-col gap-2">
-          <label
-            htmlFor="hours-select"
-            className="text-sm font-medium text-zinc-300"
-          >
-            Zaman aralığı
-          </label>
-          <select
-            id="hours-select"
-            value={hours}
-            onChange={(e) => setHours(Number(e.target.value))}
-            className="w-full sm:w-48 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500 transition-colors"
-          >
-            {HOURS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Fetch button */}
-        <button
-          onClick={handleFetchTrending}
-          disabled={loading}
-          className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 transition-colors text-sm self-start"
+        {/* ── Headline ─────────────────────────────────────────────── */}
+        <h1
+          className="font-display leading-none mb-1"
+          style={{ fontSize: "clamp(3rem, 9vw, 7rem)", color: "var(--paper)" }}
         >
-          {loading ? (
-            <>
-              <Spinner />
-              Yükleniyor…
-            </>
-          ) : (
-            "Tweet'leri Getir"
-          )}
-        </button>
-      </div>
+          NİŞ MOD
+        </h1>
 
-      {/* ── Error banner ─────────────────────────────────────────────── */}
-      {error && (
-        <div className="mt-6 rounded-lg border border-red-700 bg-red-950/40 px-4 py-3">
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
-      )}
+        <div className="rule-red mb-8" />
 
-      {/* ── Results ──────────────────────────────────────────────────── */}
-      {trendingResult && (
-        <div className="mt-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
-              Trend Tweetler
-            </h2>
-            <span className="text-xs text-zinc-600">
-              {trendingResult.tweets.length} sonuç
-            </span>
+        {/* ── Controls ─────────────────────────────────────────────── */}
+        <div className="flex flex-col gap-6 mb-8">
+
+          {/* Niche selector */}
+          <div>
+            <p className="eyebrow mb-3">NİŞ SEÇİN</p>
+            {/* Gap-px grid creates 1px separator lines via the parent background */}
+            <div
+              className="grid grid-cols-2 sm:grid-cols-4"
+              style={{ gap: "1px", background: "var(--border)" }}
+            >
+              {NICHES.map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => setNicheId(n.id)}
+                  style={{
+                    background: nicheId === n.id ? "var(--accent)" : "var(--surface)",
+                    color:      nicheId === n.id ? "#fff" : "var(--muted)",
+                    border:     "none",
+                    padding:    "1.25rem 1rem",
+                    cursor:     "pointer",
+                    transition: "background 0.12s, color 0.12s",
+                    textAlign:  "center",
+                  }}
+                >
+                  <span
+                    className="font-display block leading-none"
+                    style={{
+                      fontSize: "clamp(1.25rem, 3vw, 2rem)",
+                      color: nicheId === n.id ? "#fff" : "var(--paper)",
+                      transition: "color 0.12s",
+                    }}
+                  >
+                    {n.label}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
 
-          {trendingResult.tweets.length === 0 ? (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-5 py-8 text-center">
-              <p className="text-zinc-400 text-sm">
-                Bu niş için şu anda sonuç bulunamadı.
-              </p>
+          {/* Hours + fetch row */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label
+                htmlFor="hours-select"
+                className="eyebrow mb-2 block"
+              >
+                ZAMAN ARALIĞI
+              </label>
+              <select
+                id="hours-select"
+                value={hours}
+                onChange={(e) => setHours(Number(e.target.value))}
+                className="field"
+                style={{ width: "14rem" }}
+              >
+                {HOURS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {trendingResult.tweets.map((tweet) => (
-                <TweetRow key={tweet.url} tweet={tweet} nicheId={nicheId} />
-              ))}
-            </ul>
-          )}
+
+            <button
+              onClick={fetchTrending}
+              disabled={loading}
+              className="btn-primary"
+            >
+              {loading ? (
+                <span className="cursor-blink">YÜKLENIYOR</span>
+              ) : (
+                "TREND TWEETLER →"
+              )}
+            </button>
+          </div>
         </div>
-      )}
+
+        {/* ── Error ────────────────────────────────────────────────── */}
+        {error && (
+          <div
+            className="mb-6 px-4 py-3 font-code"
+            style={{
+              border: "1px solid var(--accent)",
+              background: "rgba(232,25,44,0.07)",
+              color: "var(--accent)",
+              fontSize: "0.78rem",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {/* ── Empty state ───────────────────────────────────────────── */}
+        {!result && !loading && !error && (
+          <div
+            className="px-6 py-16 text-center font-code"
+            style={{
+              border: "1px dashed var(--dim)",
+              color: "var(--dim)",
+              fontSize: "0.75rem",
+              letterSpacing: "0.1em",
+            }}
+          >
+            NİŞ SEÇİN · TREND TWEETLER GETİR
+          </div>
+        )}
+
+        {/* ── Results ──────────────────────────────────────────────── */}
+        {result && (
+          <div>
+            <div className="flex items-center gap-4 mb-4">
+              <p className="eyebrow" style={{ whiteSpace: "nowrap" }}>
+                TREND TWEETLER · {result.tweets.length} SONUÇ
+              </p>
+              <div className="rule-red flex-1" />
+            </div>
+
+            {result.tweets.length === 0 ? (
+              <div
+                className="px-6 py-10 text-center font-code"
+                style={{
+                  border: "1px solid var(--border)",
+                  color: "var(--muted)",
+                  fontSize: "0.8rem",
+                }}
+              >
+                Bu niş için şu anda sonuç bulunamadı.
+              </div>
+            ) : (
+              /* 1px gaps via parent background color */
+              <div
+                className="flex flex-col"
+                style={{ gap: "1px", background: "var(--border)" }}
+              >
+                {result.tweets.map((tweet) => (
+                  <TweetRow
+                    key={tweet.url ?? tweet.text.slice(0, 40)}
+                    tweet={tweet}
+                    nicheId={nicheId}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
