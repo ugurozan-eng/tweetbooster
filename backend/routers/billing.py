@@ -170,9 +170,12 @@ async def get_billing_status(
     """
     try:
         plan = get_active_plan(user["user_id"])
+    except EnvironmentError as exc:
+        # Supabase not configured (dev environment) — fall back to JWT-embedded plan
+        logger.warning("Supabase yapılandırılmamış, JWT planı kullanılıyor: %s", exc)
+        plan = user.get("plan", "trial")
     except SubscriptionServiceError as exc:
         logger.error("Plan durumu sorgulanamadı (user_id=%s): %s", user["user_id"], exc)
-        # Graceful degradation — return trial rather than a 500
-        plan = "trial"
+        plan = user.get("plan", "trial")
 
     return BillingStatusResponse(plan=plan, user_id=user["user_id"])
