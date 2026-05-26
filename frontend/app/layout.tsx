@@ -89,6 +89,12 @@ export default function RootLayout({
               >
                 Niş
               </Link>
+              <Link
+                href="/billing"
+                className="font-code text-xs tracking-widest uppercase px-4 py-3 transition-colors text-muted hover:text-paper"
+              >
+                Hesabım
+              </Link>
             </nav>
           </div>
         </header>

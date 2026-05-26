@@ -174,23 +174,21 @@ def verify_jwt(token: str) -> UserClaims:
 # ---------------------------------------------------------------------------
 
 def get_user_plan(user_id: str) -> str:
-    """Look up the user's plan in public.users.
+    """Return the user's active plan, auto-downgrading if the subscription expired.
 
-    Returns the plan string, or 'trial' if the user row doesn't exist yet.
+    Delegates to subscription_service.get_active_plan() which handles expiry
+    logic.  Returns 'trial' if the user row doesn't exist yet.
+
+    Local import is used to avoid circular imports at module load time.
     Raises AuthServiceError on unexpected DB errors.
     """
     try:
-        client: Client = get_service_client()
-        resp = (
-            client.table("users")
-            .select("plan")
-            .eq("id", user_id)
-            .maybe_single()
-            .execute()
+        # Local import prevents circular dependency at module level
+        from services.subscription_service import (  # noqa: PLC0415
+            get_active_plan,
+            SubscriptionServiceError,
         )
-        if resp.data is None:
-            return "trial"
-        return str(resp.data.get("plan", "trial"))
+        return get_active_plan(user_id)
     except EnvironmentError:
         raise
     except Exception as exc:

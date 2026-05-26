@@ -15,7 +15,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-const PROTECTED_PATHS = ["/opposition", "/niche"];
+const PROTECTED_PATHS = ["/opposition", "/niche", "/billing"];
 const AUTH_COOKIE = "twitboost-authed";
 
 // AUTH BYPASS — Sprint 2.2 design testing. Re-enable for production.

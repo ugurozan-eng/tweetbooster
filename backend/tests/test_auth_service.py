@@ -191,9 +191,15 @@ async def test_verify_jwt_kid_not_in_jwks(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 async def test_get_user_plan_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    """User row exists in DB → plan string returned."""
+    """User row exists in DB → plan string returned.
+
+    get_user_plan() now delegates to subscription_service.get_active_plan(),
+    so we patch the Supabase client on that module instead.
+    """
+    import services.subscription_service as sub_module
+
     mock_resp = MagicMock()
-    mock_resp.data = {"plan": "full"}
+    mock_resp.data = {"plan": "full", "plan_expires_at": None}
 
     mock_chain = MagicMock()
     mock_chain.execute.return_value = mock_resp
@@ -204,7 +210,7 @@ async def test_get_user_plan_found(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_client = MagicMock()
     mock_client.table.return_value = mock_chain
 
-    monkeypatch.setattr(auth_module, "get_service_client", lambda: mock_client)
+    monkeypatch.setattr(sub_module, "get_service_client", lambda: mock_client)
 
     plan = get_user_plan("user-456")
     assert plan == "full"
@@ -212,6 +218,8 @@ async def test_get_user_plan_found(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_get_user_plan_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     """No user row → 'trial' returned (default plan for new users)."""
+    import services.subscription_service as sub_module
+
     mock_resp = MagicMock()
     mock_resp.data = None
 
@@ -224,7 +232,7 @@ async def test_get_user_plan_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_client = MagicMock()
     mock_client.table.return_value = mock_chain
 
-    monkeypatch.setattr(auth_module, "get_service_client", lambda: mock_client)
+    monkeypatch.setattr(sub_module, "get_service_client", lambda: mock_client)
 
     plan = get_user_plan("new-user")
     assert plan == "trial"
@@ -232,6 +240,8 @@ async def test_get_user_plan_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_get_user_plan_db_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """DB raises unexpected exception → AuthServiceError."""
+    import services.subscription_service as sub_module
+
     mock_chain = MagicMock()
     mock_chain.execute.side_effect = RuntimeError("connection refused")
     mock_chain.eq.return_value = mock_chain
@@ -241,7 +251,7 @@ async def test_get_user_plan_db_error(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_client = MagicMock()
     mock_client.table.return_value = mock_chain
 
-    monkeypatch.setattr(auth_module, "get_service_client", lambda: mock_client)
+    monkeypatch.setattr(sub_module, "get_service_client", lambda: mock_client)
 
     with pytest.raises(AuthServiceError, match="hata"):
         get_user_plan("user-error")

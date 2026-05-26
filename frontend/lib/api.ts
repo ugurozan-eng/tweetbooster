@@ -74,6 +74,24 @@ export interface ReplyResult {
   replies: NicheReply[];
 }
 
+export interface BillingPlan {
+  id: string;
+  name: string;
+  price_try: number;
+  daily_limit: number;
+  modes: string[];
+  description: string;
+}
+
+export interface BillingStatus {
+  plan: string;
+  user_id: string;
+}
+
+export interface CheckoutResponse {
+  checkout_url: string;
+}
+
 // ---------------------------------------------------------------------------
 // Error type
 // ---------------------------------------------------------------------------
@@ -171,6 +189,69 @@ async function apiFetch<T>(
   }
 }
 
+/** GET variant of apiFetch — no body, auth header still attached. */
+async function apiGet<T>(path: string): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  let authHeader: Record<string, string> = {};
+  try {
+    const { getAccessToken } = await import("@/lib/supabase");
+    const token = await getAccessToken();
+    if (token) {
+      authHeader = { Authorization: `Bearer ${token}` };
+    }
+  } catch {
+    // Proceed without auth header if Supabase is not configured
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json", ...authHeader },
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      let detail = `İstek başarısız oldu (HTTP ${res.status})`;
+      try {
+        const json: unknown = await res.json();
+        if (
+          typeof json === "object" &&
+          json !== null &&
+          "detail" in json &&
+          typeof (json as { detail: unknown }).detail === "string"
+        ) {
+          detail = (json as { detail: string }).detail;
+        }
+      } catch {
+        // Use default message
+      }
+      throw new ApiError(detail, res.status);
+    }
+
+    const data: unknown = await res.json();
+    return data as T;
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    if (err instanceof Error) {
+      if (err.name === "AbortError") {
+        throw new ApiError(
+          `İstek zaman aşımına uğradı (${FETCH_TIMEOUT_MS / 1000} saniye). Lütfen tekrar deneyin.`,
+          408
+        );
+      }
+      throw new ApiError(
+        "Sunucuya bağlanılamadı. Backend servisinin çalıştığından emin olun.",
+        0
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public API functions
 // ---------------------------------------------------------------------------
@@ -232,4 +313,26 @@ export async function generateNicheReply(
     tweet_text: tweetText,
     niche_id: nicheId,
   });
+}
+
+/**
+ * Fetch the full plan catalogue (no auth required).
+ */
+export async function getBillingPlans(): Promise<BillingPlan[]> {
+  return apiGet<BillingPlan[]>("/api/billing/plans");
+}
+
+/**
+ * Fetch the authenticated user's current billing status.
+ */
+export async function getBillingStatus(): Promise<BillingStatus> {
+  return apiGet<BillingStatus>("/api/billing/status");
+}
+
+/**
+ * Create a LemonSqueezy hosted checkout and return the redirect URL.
+ * @param planId  One of: "niche", "opposition", "full"
+ */
+export async function createCheckout(planId: string): Promise<CheckoutResponse> {
+  return apiFetch<CheckoutResponse>("/api/billing/checkout", { plan_id: planId });
 }
