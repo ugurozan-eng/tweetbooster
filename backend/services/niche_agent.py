@@ -46,7 +46,7 @@ from services.legal_safety_filter import check_reply
 # Configuration
 # ---------------------------------------------------------------------------
 
-_MODEL = "gemini-2.5-pro"
+_MODEL = "gemini-2.0-flash"
 _SCORER_MAX_TOKENS = 1500
 _REPLY_MAX_TOKENS = 800
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"

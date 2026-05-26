@@ -39,7 +39,7 @@ from services.research_agent import ResearchResult
 # Constants
 # ---------------------------------------------------------------------------
 
-_MODEL = "gemini-2.5-pro"
+_MODEL = "gemini-2.0-flash"
 _ANALYSIS_MAX_TOKENS = 1500
 _REPLY_MAX_TOKENS = 1000
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"

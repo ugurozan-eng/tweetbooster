@@ -26,7 +26,7 @@ from google.genai import types
 # Constants
 # ---------------------------------------------------------------------------
 
-_MODEL = "gemini-2.5-pro"
+_MODEL = "gemini-2.0-flash"
 _MAX_TOKENS = 512  # identification response is small
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 

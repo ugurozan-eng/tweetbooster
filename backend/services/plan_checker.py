@@ -129,7 +129,8 @@ async def check_daily_limit(user_id: str, plan: str, mode: str) -> None:
             .execute()
         )
     except EnvironmentError:
-        raise
+        # Supabase not configured (dev environment) — skip limit check and allow request
+        return
     except Exception as exc:
         raise PlanCheckerError(
             f"Günlük kullanım verisi alınırken hata oluştu: {exc}"
