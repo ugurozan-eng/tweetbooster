@@ -12,6 +12,9 @@ Coverage
 - Gemini API error: PersonIdentifierError raised
 - Missing API key: EnvironmentError raised
 - Missing system prompt file: FileNotFoundError raised
+- twitter_handle provided → Gemini NOT called, handle used directly
+- twitter_handle with leading '@' → stripped correctly
+- whitespace-only twitter_handle → falls through to Gemini
 """
 
 from __future__ import annotations
@@ -220,3 +223,54 @@ async def test_identify_person_missing_prompt_file(
 
     with pytest.raises(FileNotFoundError, match="person_identifier.txt"):
         await identify_person("Test tweet")
+
+
+# ---------------------------------------------------------------------------
+# identify_person — twitter_handle fast-path (skips Gemini)
+# ---------------------------------------------------------------------------
+
+
+async def test_identify_person_with_handle_skips_gemini(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When twitter_handle is supplied, Gemini is NOT called."""
+    generate_mock = _mock_gemini(
+        monkeypatch,
+        '{"name": "Should Not Appear", "handle": "other", "topic": "x", "confidence": "high"}',
+    )
+
+    result = await identify_person("Bazı tweet metni", twitter_handle="@rdoganoglu")
+
+    assert result["handle"] == "rdoganoglu"
+    assert result["name"] == "rdoganoglu"
+    assert result["confidence"] == "high"
+    # Gemini must NOT have been called
+    generate_mock.assert_not_awaited()
+
+
+async def test_identify_person_handle_at_prefix_stripped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Leading '@' characters are stripped from the handle."""
+    generate_mock = _mock_gemini(monkeypatch, "{}")
+
+    result = await identify_person("Tweet", twitter_handle="@kamuoyundaki")
+
+    assert result["handle"] == "kamuoyundaki"
+    assert result["name"] == "kamuoyundaki"
+    generate_mock.assert_not_awaited()
+
+
+async def test_identify_person_whitespace_handle_falls_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A whitespace-only handle is ignored and Gemini is called as normal."""
+    generate_mock = _mock_gemini(
+        monkeypatch,
+        '{"name": "Ahmet", "handle": "ahmet", "topic": "siyaset", "confidence": "high"}',
+    )
+
+    result = await identify_person("Tweet about Ahmet", twitter_handle="   ")
+
+    assert result["name"] == "Ahmet"
+    generate_mock.assert_awaited_once()

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bebas_Neue, JetBrains_Mono, Geist } from "next/font/google";
+import { Bebas_Neue, IBM_Plex_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 
@@ -12,17 +12,10 @@ const bebas = Bebas_Neue({
   display: "swap",
 });
 
-const jetbrains = JetBrains_Mono({
-  variable: "--font-jetbrains",
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-mono",
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  display: "swap",
-});
-
-// Keep Geist as fallback (used by --font-geist-sans legacy token)
-const geist = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
   display: "swap",
 });
 
@@ -41,7 +34,7 @@ export default function RootLayout({
   return (
     <html
       lang="tr"
-      className={`${bebas.variable} ${jetbrains.variable} ${geist.variable} h-full`}
+      className={`${bebas.variable} ${ibmPlexMono.variable} h-full`}
     >
       <body
         className="min-h-full flex flex-col"
@@ -49,29 +42,41 @@ export default function RootLayout({
       >
         {/* ── Nav ─────────────────────────────────────────────────────── */}
         <header
-          className="sticky top-0 z-20"
           style={{
+            height: "48px",
             background: "var(--bg)",
-            borderBottom: "1px solid var(--border)",
-            borderBottomColor: "var(--accent)",
-            borderBottomWidth: "1px",
+            borderBottom: "1px solid var(--accent)",
+            position: "sticky",
+            top: 0,
+            zIndex: 20,
+            display: "flex",
+            alignItems: "stretch",
           }}
         >
-          {/* thin red line at very top */}
-          <div style={{ height: "2px", background: "var(--accent)" }} />
+          {/* 2px red top line */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0, left: 0, right: 0,
+              height: "2px",
+              background: "var(--accent)",
+            }}
+          />
 
-          <div className="mx-auto max-w-6xl flex items-center justify-between px-4 py-2">
+          <div
+            className="mx-auto max-w-6xl w-full px-4 flex items-center justify-between"
+          >
             {/* Wordmark */}
             <Link
               href="/"
-              className="font-display text-2xl tracking-wide"
-              style={{ color: "var(--paper)", lineHeight: 1 }}
+              className="font-display tracking-wide"
+              style={{ color: "var(--paper)", fontSize: "1.5rem", lineHeight: 1 }}
             >
               TWITBOOST
             </Link>
 
             {/* Nav links */}
-            <nav className="flex items-center gap-0">
+            <nav className="flex items-center">
               <Link
                 href="/opposition"
                 className="font-code text-xs tracking-widest uppercase px-4 py-3 transition-colors text-muted hover:text-paper"
@@ -93,14 +98,15 @@ export default function RootLayout({
 
         {/* ── Footer ──────────────────────────────────────────────────── */}
         <footer
-          className="py-3 px-4 text-center"
           style={{
+            padding: "0.625rem 1rem",
+            textAlign: "center",
             borderTop: "1px solid var(--border)",
             color: "var(--muted)",
-            fontSize: "0.6rem",
+            fontSize: "0.55rem",
             letterSpacing: "0.14em",
             textTransform: "uppercase",
-            fontFamily: "var(--font-jetbrains), monospace",
+            fontFamily: "var(--font-ibm-mono), monospace",
           }}
         >
           TwitBoost — Türk Twitter Kullanıcıları için AI Araştırma Aracı

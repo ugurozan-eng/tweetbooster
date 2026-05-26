@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   getNicheTrending,
   generateNicheReply,
@@ -13,18 +13,18 @@ import {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const NICHES = [
-  { id: "food",     label: "YEMEK"    },
-  { id: "football", label: "FUTBOL"   },
-  { id: "economy",  label: "EKONOMİ"  },
-  { id: "politics", label: "SİYASET"  },
+  { id: "food",     label: "YEMEK"   },
+  { id: "football", label: "FUTBOL"  },
+  { id: "economy",  label: "EKONOMİ" },
+  { id: "politics", label: "SİYASET" },
 ] as const;
 
 type NicheId = (typeof NICHES)[number]["id"];
 
 const HOURS_OPTIONS = [
-  { value: 1, label: "Son 1 saat" },
-  { value: 3, label: "Son 3 saat" },
-  { value: 6, label: "Son 6 saat" },
+  { value: 1, label: "1S"  },
+  { value: 3, label: "3S"  },
+  { value: 6, label: "6S"  },
 ];
 
 const HOOK_LABELS: Record<string, string> = {
@@ -39,128 +39,141 @@ const HOOK_BADGE: Record<string, string> = {
   fact:     "badge badge-high",
 };
 
-// ── Reply card ────────────────────────────────────────────────────────────────
+// ── Copy button ───────────────────────────────────────────────────────────────
 
-function ReplyCard({ reply, index }: { reply: NicheReply; index: number }) {
+function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
-  const copy = async () => {
+  const copy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(reply.text);
+      await navigator.clipboard.writeText(text);
     } catch {
       const el = document.createElement("textarea");
-      el.value = reply.text;
-      el.style.position = "absolute";
-      el.style.left = "-9999px";
+      el.value = text;
+      el.style.cssText = "position:absolute;left:-9999px";
       document.body.appendChild(el);
       el.select();
       document.execCommand("copy");
       document.body.removeChild(el);
     }
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+    setTimeout(() => setCopied(false), 800);
+  }, [text]);
 
+  return (
+    <button
+      onClick={copy}
+      className={`btn-ghost ${copied ? "copied-flash" : ""}`}
+      style={{ fontSize: "0.6rem", padding: "0.25rem 0.625rem" }}
+      aria-label="Yanıtı kopyala"
+    >
+      {copied ? "✓ KOPYALANDI" : "KOPYALA"}
+    </button>
+  );
+}
+
+// ── Reply card (inside expanded row) ─────────────────────────────────────────
+
+function NicheReplyCard({
+  reply,
+  index,
+}: {
+  reply: NicheReply;
+  index: number;
+}) {
   const hookClass = HOOK_BADGE[reply.hook_type] ?? "badge badge-medium";
   const hookLabel = HOOK_LABELS[reply.hook_type] ?? reply.hook_type.toUpperCase();
 
   return (
     <div
       className="evidence-card stamp-in flex flex-col gap-3 p-4"
-      style={{ minHeight: "160px" }}
+      style={{ minHeight: "140px" }}
     >
-      {/* Header row */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <p className="eyebrow">YANIT {index + 1}</p>
           <span className={hookClass}>{hookLabel}</span>
         </div>
-        <button
-          onClick={copy}
-          className="btn-ghost"
-          style={{
-            fontSize: "0.65rem",
-            padding: "0.25rem 0.625rem",
-            color: copied ? "#6ee7b7" : undefined,
-            borderColor: copied ? "#6ee7b7" : undefined,
-          }}
-        >
-          {copied ? "KOPYALANDI ✓" : "KOPYALA"}
-        </button>
+        <CopyButton text={reply.text} />
       </div>
-
-      {/* Reply text */}
       <p
         className="font-code flex-1"
-        style={{ color: "var(--paper)", fontSize: "0.8rem", lineHeight: 1.75 }}
+        style={{ fontSize: "0.8rem", color: "var(--paper)", lineHeight: 1.75 }}
       >
         {reply.text}
       </p>
-
-      {/* Char count */}
-      <p className="datestamp text-right">{reply.text.length} karakter</p>
+      <p className="datestamp text-right">{reply.text.length} kar.</p>
     </div>
   );
 }
 
 // ── Tweet row ─────────────────────────────────────────────────────────────────
 
-type ReplyState = {
-  loading: boolean;
-  error: string | null;
-  replies: NicheReply[] | null;
-};
+type ReplyState =
+  | { phase: "idle" }
+  | { phase: "loading" }
+  | { phase: "error"; message: string }
+  | { phase: "done"; replies: NicheReply[] };
 
-function TweetRow({ tweet, nicheId }: { tweet: ScoredTweet; nicheId: NicheId }) {
-  const [state, setState] = useState<ReplyState>({
-    loading: false,
-    error: null,
-    replies: null,
-  });
+function TweetRow({
+  tweet,
+  nicheId,
+}: {
+  tweet: ScoredTweet;
+  nicheId: NicheId;
+}) {
+  const [state, setState] = useState<ReplyState>({ phase: "idle" });
 
   const generate = async () => {
-    setState({ loading: true, error: null, replies: null });
+    setState({ phase: "loading" });
     try {
       const data = await generateNicheReply(tweet.text, nicheId);
-      setState({ loading: false, error: null, replies: data.replies });
+      setState({ phase: "done", replies: data.replies });
     } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : "Yanıt üretilirken hata oluştu.";
-      setState({ loading: false, error: message, replies: null });
+      setState({
+        phase: "error",
+        message:
+          err instanceof ApiError ? err.message : "Yanıt üretilirken hata oluştu.",
+      });
     }
   };
 
+  const isLoading = state.phase === "loading";
+
   return (
-    <div className="evidence-card" style={{ background: "var(--surface)" }}>
-      {/* ── Main row ────────────────────────────────────────────────── */}
+    <div style={{ background: "var(--surface)" }}>
+      {/* ── Main row ─────────────────────────────────────────── */}
       <div
-        className="grid items-start gap-4 p-4"
-        style={{ gridTemplateColumns: "3.5rem 1fr auto" }}
+        className="grid items-start gap-4 px-4 py-3"
+        style={{ gridTemplateColumns: "2.75rem 1fr auto" }}
       >
-        {/* Score column */}
-        <div className="flex flex-col items-center pt-0.5 shrink-0">
+        {/* Score */}
+        <div className="flex flex-col items-center shrink-0 pt-0.5">
           <span
             className="font-display leading-none"
-            style={{ fontSize: "2.5rem", color: "var(--accent)" }}
+            style={{ fontSize: "2.25rem", color: "var(--accent)" }}
           >
             {tweet.score}
           </span>
-          <span className="eyebrow" style={{ fontSize: "0.5rem" }}>/10</span>
+          <span className="eyebrow" style={{ fontSize: "0.45rem" }}>/10</span>
         </div>
 
-        {/* Tweet text column */}
-        <div className="flex flex-col gap-1.5 min-w-0">
+        {/* Tweet text */}
+        <div className="flex flex-col gap-1 min-w-0 py-1">
           <p
             className="font-code"
-            style={{ color: "var(--paper)", fontSize: "0.8125rem", lineHeight: 1.7 }}
+            style={{
+              fontSize: "0.8125rem",
+              color: "var(--paper)",
+              lineHeight: 1.6,
+              display: "-webkit-box",
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
           >
             {tweet.text}
           </p>
-          {tweet.reason && (
-            <p className="eyebrow" style={{ letterSpacing: "0.06em" }}>
-              {tweet.reason}
-            </p>
-          )}
           {tweet.url && (
             <a
               href={tweet.url}
@@ -169,61 +182,54 @@ function TweetRow({ tweet, nicheId }: { tweet: ScoredTweet; nicheId: NicheId }) 
               className="footnote-link"
               style={{ width: "fit-content" }}
             >
-              TWEET → KAYNAK
+              KAYNAK →
             </a>
           )}
         </div>
 
-        {/* Action column */}
-        <div className="shrink-0 pt-0.5">
+        {/* Action */}
+        <div className="shrink-0 pt-1">
           <button
             onClick={generate}
-            disabled={state.loading}
+            disabled={isLoading}
             className="btn-ghost"
             style={{ whiteSpace: "nowrap" }}
           >
-            {state.loading ? (
-              <span className="cursor-blink" style={{ fontSize: "0.65rem" }}>
+            {isLoading ? (
+              <span className="cursor-blink" style={{ fontSize: "0.6rem" }}>
                 ÜRET
               </span>
-            ) : state.replies ? (
+            ) : state.phase === "done" ? (
               "YENİDEN →"
             ) : (
-              "YANIT ÜRET →"
+              "YANITLA →"
             )}
           </button>
         </div>
       </div>
 
-      {/* ── Inline error ───────────────────────────────────────────── */}
-      {state.error && (
-        <div
-          className="mx-4 mb-4 px-3 py-2 font-code"
-          style={{
-            border: "1px solid var(--accent)",
-            background: "rgba(232,25,44,0.07)",
-            color: "var(--accent)",
-            fontSize: "0.75rem",
-          }}
-        >
-          {state.error}
+      {/* ── Error ───────────────────────────────────────────── */}
+      {state.phase === "error" && (
+        <div className="error-box mx-4 mb-3" style={{ fontSize: "0.73rem" }}>
+          {state.message}
         </div>
       )}
 
-      {/* ── Replies panel ──────────────────────────────────────────── */}
-      {state.replies && state.replies.length > 0 && (
-        <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
-          <div className="p-4">
-            <div className="rule-red mb-4" />
-            <p className="eyebrow mb-3">YANIT SEÇENEKLERİ</p>
-            <div
-              className="grid gap-3"
-              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}
-            >
-              {state.replies.map((r, i) => (
-                <ReplyCard key={i} reply={r} index={i} />
-              ))}
-            </div>
+      {/* ── Reply expansion ──────────────────────────────────── */}
+      {state.phase === "done" && state.replies.length > 0 && (
+        <div
+          className="p-4"
+          style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}
+        >
+          <div className="rule-red mb-4" />
+          <p className="eyebrow mb-3">YANIT SEÇENEKLERİ</p>
+          <div
+            className="grid gap-3"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
+          >
+            {state.replies.map((r, i) => (
+              <NicheReplyCard key={i} reply={r} index={i} />
+            ))}
           </div>
         </div>
       )}
@@ -234,11 +240,11 @@ function TweetRow({ tweet, nicheId }: { tweet: ScoredTweet; nicheId: NicheId }) 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function NichePage() {
-  const [nicheId, setNicheId]       = useState<NicheId>("food");
-  const [hours, setHours]           = useState<number>(1);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState<string | null>(null);
-  const [result, setResult]         = useState<TrendingResult | null>(null);
+  const [nicheId, setNicheId] = useState<NicheId>("food");
+  const [hours, setHours]     = useState<number>(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+  const [result, setResult]   = useState<TrendingResult | null>(null);
 
   const fetchTrending = async () => {
     setLoading(true);
@@ -259,44 +265,40 @@ export default function NichePage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-5rem)] px-4 py-12 max-w-6xl mx-auto">
+    <div className="min-h-[calc(100vh-48px)] px-4 py-10 max-w-6xl mx-auto">
       <div className="stagger-in">
 
-        {/* ── Eyebrow ──────────────────────────────────────────────── */}
-        <p className="eyebrow mb-4">MOD 02 · Niş Trend Analizi</p>
-
-        {/* ── Headline ─────────────────────────────────────────────── */}
+        {/* ── Eyebrow + heading ────────────────────────────────── */}
+        <p className="eyebrow mb-3">MOD 02 · Niş Trend Analizi</p>
         <h1
           className="font-display leading-none mb-1"
-          style={{ fontSize: "clamp(3rem, 9vw, 7rem)", color: "var(--paper)" }}
+          style={{ fontSize: "clamp(3rem, 9vw, 6rem)", color: "var(--paper)" }}
         >
           NİŞ MOD
         </h1>
-
         <div className="rule-red mb-8" />
 
-        {/* ── Controls ─────────────────────────────────────────────── */}
+        {/* ── Controls ─────────────────────────────────────────── */}
         <div className="flex flex-col gap-6 mb-8">
 
-          {/* Niche selector */}
+          {/* Niche selector — 4 bordered buttons, selected = red fill */}
           <div>
             <p className="eyebrow mb-3">NİŞ SEÇİN</p>
-            {/* Gap-px grid creates 1px separator lines via the parent background */}
             <div
               className="grid grid-cols-2 sm:grid-cols-4"
-              style={{ gap: "1px", background: "var(--border)" }}
+              style={{ gap: "1px", background: "var(--accent)" }}
             >
               {NICHES.map((n) => (
                 <button
                   key={n.id}
                   onClick={() => setNicheId(n.id)}
                   style={{
-                    background: nicheId === n.id ? "var(--accent)" : "var(--surface)",
-                    color:      nicheId === n.id ? "#fff" : "var(--muted)",
+                    background: nicheId === n.id ? "var(--accent)" : "var(--bg)",
+                    color:      nicheId === n.id ? "#000"          : "var(--muted)",
                     border:     "none",
                     padding:    "1.25rem 1rem",
                     cursor:     "pointer",
-                    transition: "background 0.12s, color 0.12s",
+                    transition: "background 0.1s, color 0.1s",
                     textAlign:  "center",
                   }}
                 >
@@ -304,8 +306,8 @@ export default function NichePage() {
                     className="font-display block leading-none"
                     style={{
                       fontSize: "clamp(1.25rem, 3vw, 2rem)",
-                      color: nicheId === n.id ? "#fff" : "var(--paper)",
-                      transition: "color 0.12s",
+                      color: nicheId === n.id ? "#000" : "var(--paper)",
+                      transition: "color 0.1s",
                     }}
                   >
                     {n.label}
@@ -315,28 +317,38 @@ export default function NichePage() {
             </div>
           </div>
 
-          {/* Hours + fetch row */}
+          {/* Hours pills + fetch button */}
           <div className="flex flex-wrap items-end gap-4">
             <div>
-              <label
-                htmlFor="hours-select"
-                className="eyebrow mb-2 block"
-              >
-                ZAMAN ARALIĞI
-              </label>
-              <select
-                id="hours-select"
-                value={hours}
-                onChange={(e) => setHours(Number(e.target.value))}
-                className="field"
-                style={{ width: "14rem" }}
-              >
+              <p className="eyebrow mb-3">ZAMAN ARALIĞI</p>
+              <div className="flex gap-px" style={{ background: "var(--border)" }}>
                 {HOURS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
+                  <button
+                    key={opt.value}
+                    onClick={() => setHours(opt.value)}
+                    style={{
+                      background: hours === opt.value ? "var(--accent)" : "var(--surface)",
+                      color:      hours === opt.value ? "#000"          : "var(--muted)",
+                      border:     "none",
+                      padding:    "0.5rem 1rem",
+                      cursor:     "pointer",
+                      transition: "background 0.1s, color 0.1s",
+                    }}
+                  >
+                    <span
+                      className="font-display"
+                      style={{
+                        fontSize: "1.25rem",
+                        letterSpacing: "0.04em",
+                        color: hours === opt.value ? "#000" : "var(--paper)",
+                        transition: "color 0.1s",
+                      }}
+                    >
+                      {opt.label}
+                    </span>
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
             <button
@@ -347,28 +359,16 @@ export default function NichePage() {
               {loading ? (
                 <span className="cursor-blink">YÜKLENIYOR</span>
               ) : (
-                "TREND TWEETLER →"
+                "TWEET&apos;LERİ GETİR →"
               )}
             </button>
           </div>
         </div>
 
-        {/* ── Error ────────────────────────────────────────────────── */}
-        {error && (
-          <div
-            className="mb-6 px-4 py-3 font-code"
-            style={{
-              border: "1px solid var(--accent)",
-              background: "rgba(232,25,44,0.07)",
-              color: "var(--accent)",
-              fontSize: "0.78rem",
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {/* ── Error ────────────────────────────────────────────── */}
+        {error && <div className="error-box mb-6">{error}</div>}
 
-        {/* ── Empty state ───────────────────────────────────────────── */}
+        {/* ── Empty state ───────────────────────────────────────── */}
         {!result && !loading && !error && (
           <div
             className="px-6 py-16 text-center font-code"
@@ -379,14 +379,14 @@ export default function NichePage() {
               letterSpacing: "0.1em",
             }}
           >
-            NİŞ SEÇİN · TREND TWEETLER GETİR
+            // NİŞ SEÇİN · TREND TWEETLER GETİR
           </div>
         )}
 
-        {/* ── Results ──────────────────────────────────────────────── */}
+        {/* ── Results table ────────────────────────────────────── */}
         {result && (
           <div>
-            <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-4 mb-3">
               <p className="eyebrow" style={{ whiteSpace: "nowrap" }}>
                 TREND TWEETLER · {result.tweets.length} SONUÇ
               </p>
@@ -405,7 +405,7 @@ export default function NichePage() {
                 Bu niş için şu anda sonuç bulunamadı.
               </div>
             ) : (
-              /* 1px gaps via parent background color */
+              /* 1px separators via parent bg color */
               <div
                 className="flex flex-col"
                 style={{ gap: "1px", background: "var(--border)" }}

@@ -189,15 +189,18 @@ export async function identifyPerson(
 
 /**
  * Run full opposition analysis: identify → research → analyse → generate replies.
- * @param tones  Subset of ["cold", "sharp", "thread"]. Defaults to all three.
+ * @param tones          Subset of ["cold", "sharp", "thread"]. Defaults to all three.
+ * @param twitterHandle  Optional. When provided the backend skips AI name extraction.
  */
 export async function runOppositionAnalysis(
   tweetText: string,
-  tones: string[]
+  tones: string[],
+  twitterHandle?: string
 ): Promise<AnalysisResult> {
   return apiFetch<AnalysisResult>("/api/opposition/analyze", {
     tweet_text: tweetText,
     tones,
+    ...(twitterHandle?.trim() ? { twitter_handle: twitterHandle.trim() } : {}),
   });
 }
 

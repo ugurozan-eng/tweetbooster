@@ -2,8 +2,7 @@
 
 /**
  * TwitBoost — Giriş Sayfası
- * Email/password sign-in via Supabase Auth.
- * Successful login → set auth cookie → redirect to /
+ * Neo-brutalist login. Supabase email/password + Google OAuth.
  */
 
 import { useState, FormEvent } from "react";
@@ -67,7 +66,6 @@ export default function LoginPage() {
       if (authError) {
         setError(`Google ile giriş yapılamadı: ${authError.message}`);
       }
-      // On success Supabase redirects — no manual navigation needed.
     } catch {
       setError("Google ile giriş sırasında beklenmedik bir hata oluştu.");
     } finally {
@@ -76,15 +74,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-[calc(100vh-48px)] flex items-center justify-center px-4">
+      <div className="w-full max-w-xs">
 
-        {/* ── Brand ──────────────────────────────────────────────────── */}
+        {/* ── Brand ──────────────────────────────────────────────── */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-block">
+          <Link href="/">
             <span
-              className="font-display leading-none"
-              style={{ fontSize: "clamp(3rem, 10vw, 5rem)", color: "var(--paper)" }}
+              className="font-display leading-none block"
+              style={{ fontSize: "4.5rem", color: "var(--paper)" }}
             >
               TWITBOOST
             </span>
@@ -93,23 +91,18 @@ export default function LoginPage() {
           <p className="eyebrow">Hesabınıza giriş yapın</p>
         </div>
 
-        {/* ── Error ──────────────────────────────────────────────────── */}
+        {/* ── Error (inline mono, no box) ─────────────────────────── */}
         {error && (
-          <div
-            className="mb-5 px-4 py-3 font-code"
-            style={{
-              border: "1px solid var(--accent)",
-              background: "rgba(232,25,44,0.07)",
-              color: "var(--accent)",
-              fontSize: "0.78rem",
-            }}
+          <p
+            className="font-code mb-5"
+            style={{ color: "var(--accent)", fontSize: "0.75rem", lineHeight: 1.5 }}
           >
             {error}
-          </div>
+          </p>
         )}
 
-        {/* ── Email / password form ───────────────────────────────────── */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {/* ── Form ───────────────────────────────────────────────── */}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div>
             <label htmlFor="email" className="eyebrow mb-2 block">
               E-POSTA
@@ -123,6 +116,7 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="ornek@mail.com"
               className="field"
+              disabled={loading}
             />
           </div>
 
@@ -139,13 +133,14 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               className="field"
+              disabled={loading}
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="btn-primary w-full mt-2"
+            className="btn-primary w-full"
           >
             {loading ? (
               <span className="cursor-blink">GİRİŞ YAPILIYOR</span>
@@ -155,22 +150,21 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* ── Divider ────────────────────────────────────────────────── */}
+        {/* ── Divider ────────────────────────────────────────────── */}
         <div className="flex items-center gap-3 my-6">
           <div className="flex-1" style={{ borderTop: "1px solid var(--border)" }} />
           <span className="eyebrow">VEYA</span>
           <div className="flex-1" style={{ borderTop: "1px solid var(--border)" }} />
         </div>
 
-        {/* ── Google OAuth ───────────────────────────────────────────── */}
+        {/* ── Google OAuth ───────────────────────────────────────── */}
         <button
           type="button"
           onClick={handleGoogleSignIn}
           disabled={loading}
           className="btn-ghost w-full"
-          style={{ justifyContent: "center", gap: "0.625rem" }}
+          style={{ justifyContent: "center", gap: "0.625rem", height: "44px" }}
         >
-          {/* Minimal Google G mark */}
           <span
             className="font-display leading-none"
             style={{ fontSize: "1rem", color: "var(--paper)" }}

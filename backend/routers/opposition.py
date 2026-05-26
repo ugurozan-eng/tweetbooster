@@ -49,6 +49,12 @@ class AnalyzeRequest(BaseModel):
         default=["cold", "sharp", "thread"],
         description="Which reply tones to generate. Valid values: cold, sharp, thread.",
     )
+    twitter_handle: str | None = Field(
+        default=None,
+        max_length=50,
+        description="Optional Twitter handle (e.g. '@username'). When provided the AI "
+                    "name-extraction step is skipped and the handle is used directly.",
+    )
 
 
 class ContradictionResponse(BaseModel):
@@ -120,7 +126,7 @@ async def analyze(
 
     # ── Step 1: person identification ─────────────────────────────────────
     try:
-        person = await identify_person(body.tweet_text)
+        person = await identify_person(body.tweet_text, twitter_handle=body.twitter_handle)
     except PersonNotFoundError:
         # Tweet has no identifiable person — user guidance, not a system error.
         raise HTTPException(

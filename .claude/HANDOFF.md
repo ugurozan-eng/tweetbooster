@@ -6,46 +6,50 @@
 
 ## Last Completed Sprint
 
-**Frontend Design Sprint — Newsroom / Evidence Room**
+**Neo-Brutalist Redesign Sprint + twitter_handle input**
 **Date:** 2026-05-26
 
-### ✅ Design Sprint is COMPLETE
+### ✅ Neo-brutalist redesign + twitter_handle input COMPLETE
 
-Full UI overhaul across all pages. `tsc --noEmit` clean, `next build` clean (8/8 pages).
+119/119 backend tests passing. `tsc --noEmit` clean. `next build` 8/8 clean.
 
 ### What was done this session
 
-#### Design System
+#### Backend changes
+| File | Change |
+|------|---------|
+| `backend/routers/opposition.py` | `AnalyzeRequest` gets `twitter_handle: str \| None = None`; passed to `identify_person()` |
+| `backend/services/person_identifier.py` | `identify_person(tweet_text, twitter_handle=None)` — fast-path: if handle supplied, Gemini skipped, handle used directly as `name` + `handle` |
+| `backend/tests/test_person_identifier.py` | +3 tests: handle skips Gemini; `@` prefix stripped; whitespace-only handle falls through |
+
+#### Design system changes
 | File | Change |
 |------|--------|
-| `frontend/app/globals.css` | Full rewrite: design tokens (`--bg`, `--paper`, `--accent`, `--muted`, `--border`, `--surface`), animations (`fadeSlideUp`, `stampIn`, `scanAcross`, `blink`), utility classes (`.evidence-card`, `.field`, `.btn-primary`, `.btn-ghost`, `.eyebrow`, `.badge`, `.datestamp`, `.rule-red`) |
-| `frontend/app/layout.tsx` | Bebas Neue + JetBrains Mono fonts; newsroom nav with 2px red top line; nav hover via Tailwind `text-muted hover:text-paper` (no JS event handlers — server-component compatible) |
+| `frontend/app/globals.css` | IBM Plex Mono replaces JetBrains Mono; `--warn: #f5c518`; `.card-mode` hover (red fill + black text); `.tone-pill` toggle; `.warn-box` / `.error-box`; `prefers-reduced-motion` support |
+| `frontend/app/layout.tsx` | IBM Plex Mono; 48px explicit nav height; 1px red bottom border |
 
-#### Pages redesigned
-| Page | Design |
-|------|--------|
-| `app/page.tsx` | Hero landing: giant Bebas Neue headline, two newspaper-column mode cards |
-| `app/opposition/page.tsx` | Two-column grid (340px left / flex-1 right); `.evidence-card` results with `stamp-in`; yellow 422 warning vs red error |
-| `app/niche/page.tsx` | 4 large niche buttons (selected = red fill); tweet table rows (score left in accent red, text center, YANIT ÜRET right); reply panel expands below row in 3 columns |
-| `app/login/page.tsx` | Centered stark layout; large TWITBOOST in Bebas Neue; `.field` inputs; full-width red submit button |
+#### Pages redesigned (neo-brutalist / "Bloomberg Terminal meets redacted government document")
+| Page | Design highlights |
+|------|-------------------|
+| `app/page.tsx` | Giant Bebas Neue headline with red period; two cards with 1px red border → hover fills red + text inverts black; `v0.1 — kişisel kullanım` footer line |
+| `app/opposition/page.tsx` | 40%/60% two-column; twitter handle text input below tweet textarea; tone pills (`.tone-pill` → red fill when active); `ANALİZ ET →` 48px red button; "// analiz bekleniyor" 30% opacity idle state; BASIN KİMLİĞİ press badge; contradiction cards with large red `≠`; reply cards with SOĞUK/KESKİN/THREAD Bebas headers; 800ms copy flash |
+| `app/niche/page.tsx` | 4 niche selector buttons (red gap grid, selected = red fill + black text); 3 hour pills (1S/3S/6S); tweet table (score in accent red left, text center, YANITLA → right); row expands to 3-column reply grid |
+| `app/login/page.tsx` | 4.5rem TWITBOOST Bebas top; rule-red; transparent 1px border inputs; red 48px submit; inline mono error (no box) |
 
-#### Auth bypass (testing only)
-| File | Change |
-|------|--------|
-| `frontend/proxy.ts` | `return NextResponse.next()` at top — auth bypass; original 401 logic preserved as comments |
-| `backend/middleware/auth_middleware.py` | Dev user returned when no credentials; production 401 logic preserved as comments |
-
-**To restore auth:** remove `return NextResponse.next()` from `proxy.ts` and remove dev bypass block from `auth_middleware.py`.
+#### Auth bypass (still active from previous sprint)
+- `frontend/proxy.ts`: `return NextResponse.next()` at top
+- `backend/middleware/auth_middleware.py`: dev user fallback
+- **To restore:** remove bypass lines (clearly commented in both files)
 
 ### Test count
-**116 / 116 passing** (no backend changes this sprint)
+**119 / 119 passing** (+3 from twitter_handle fast-path tests)
 
 ### Blockers / Notes for Sprint 2.2
 
-- **Auth bypass is active**: must be removed before production deploy (see above)
-- **GEMINI_API_KEY needed**: add to backend `.env` file. Get from https://aistudio.google.com/apikey
-- **Migration 001 must be applied** in Supabase SQL Editor before Sprint 2.2 tests
-- **Supabase env vars needed**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` in backend `.env`; `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `frontend/.env.local`
+- **Auth bypass is active**: remove before production deploy
+- **GEMINI_API_KEY**: set in `backend/.env` (done — do not commit)
+- **Migration 001 must be applied** in Supabase SQL Editor
+- **Supabase env vars needed**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`; `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `frontend/.env.local`
 - **CORS still `allow_origins=["*"]`**: restrict to Vercel domain before public deploy
 
 ---

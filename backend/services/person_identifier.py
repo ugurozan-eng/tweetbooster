@@ -117,25 +117,42 @@ def _parse_claude_json(raw: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def identify_person(tweet_text: str) -> PersonIdentification:
+async def identify_person(
+    tweet_text: str,
+    twitter_handle: str | None = None,
+) -> PersonIdentification:
     """
     Extract the person's identity from a raw tweet.
 
     Args:
-        tweet_text: Raw tweet text pasted by the user (any language).
+        tweet_text:      Raw tweet text pasted by the user (any language).
+        twitter_handle:  Optional. When supplied the Gemini name-extraction
+                         step is skipped entirely — the cleaned handle is used
+                         as both ``name`` and ``handle`` for downstream search.
 
     Returns:
         :class:`PersonIdentification` dict with ``name``, ``handle``,
         ``topic``, and ``confidence``.
 
     Raises:
-        EnvironmentError:       ``GEMINI_API_KEY`` is not set.
-        FileNotFoundError:      System prompt file is missing.
+        EnvironmentError:       ``GEMINI_API_KEY`` is not set (fast-path bypasses this).
+        FileNotFoundError:      System prompt file is missing (fast-path bypasses this).
         PersonIdentifierError:  Gemini API call failed or returned bad JSON.
         PersonNotFoundError:    Tweet contains no identifiable person
                                 (confidence='low', name=None). Caller should
                                 return HTTP 422 with a user-friendly message.
     """
+    # ── Fast path: caller already knows the handle → skip Gemini entirely ──
+    if twitter_handle:
+        clean = twitter_handle.lstrip("@").strip()
+        if clean:
+            return PersonIdentification(
+                name=clean,
+                handle=clean,
+                topic="",
+                confidence="high",
+            )
+
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise EnvironmentError(

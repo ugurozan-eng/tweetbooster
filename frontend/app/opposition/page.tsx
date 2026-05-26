@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   runOppositionAnalysis,
   AnalysisResult,
@@ -9,132 +9,143 @@ import {
   ApiError,
 } from "@/lib/api";
 
-// ── Constants ──────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-const TONE_KEYS = ["cold", "sharp", "thread"] as const;
-type ToneKey = (typeof TONE_KEYS)[number];
+const TONES = [
+  { id: "cold",   label: "SOĞUK"  },
+  { id: "sharp",  label: "KESKİN" },
+  { id: "thread", label: "THREAD" },
+] as const;
 
-const TONE_LABELS: Record<ToneKey, string> = {
+type ToneId = (typeof TONES)[number]["id"];
+
+const TONE_HEADER: Record<ToneId, string> = {
   cold:   "SOĞUK",
   sharp:  "KESKİN",
   thread: "THREAD",
 };
 
-const TONE_DESC: Record<ToneKey, string> = {
-  cold:   "Nötr, gazetecilik",
-  sharp:  "İğneleyici, dokunaklı",
-  thread: "Çok tweetlik dizi",
-};
+// ── Copy button ───────────────────────────────────────────────────────────────
 
-const CONFIDENCE_LABEL: Record<string, string> = {
-  high:   "YÜKSEK",
-  medium: "ORTA",
-  low:    "DÜŞÜK",
-};
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
 
-// ── Sub-components ──────────────────────────────────────────────────────────
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const el = document.createElement("textarea");
+      el.value = text;
+      el.style.cssText = "position:absolute;left:-9999px";
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 800);
+  }, [text]);
 
-/** Horizontal scan-line loading state */
-function LoadingBar() {
   return (
-    <div className="scanning h-px w-full my-6" style={{ background: "var(--border)" }} />
+    <button
+      onClick={copy}
+      className={`btn-ghost ${copied ? "copied-flash" : ""}`}
+      style={{ fontSize: "0.6rem", padding: "0.25rem 0.625rem" }}
+      aria-label="Yanıtı kopyala"
+    >
+      {copied ? "✓ KOPYALANDI" : "KOPYALA"}
+    </button>
   );
 }
 
-/** Press ID badge for the identified person */
+// ── Person press-badge ────────────────────────────────────────────────────────
+
 function PersonBadge({ result }: { result: AnalysisResult }) {
-  const conf = result.contradictions[0]?.confidence ?? "low";
-  const badgeClass =
-    conf === "high" ? "badge-high" : conf === "medium" ? "badge-medium" : "badge-low";
-
+  const noContradictions = result.status === "no_contradictions_found";
   return (
-    <div
-      className="evidence-card flagged stamp-in p-5 mb-6"
-    >
+    <div className="evidence-card flagged stamp-in p-5">
       <p className="eyebrow mb-3">BASIN KİMLİĞİ</p>
-
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h2
-            className="font-display leading-none mb-1"
-            style={{ fontSize: "clamp(2rem, 5vw, 3.25rem)", color: "var(--paper)" }}
-          >
-            {result.person_name}
-          </h2>
-          {result.contradictions.length > 0 && (
-            <p
-              className="font-code"
-              style={{ color: "var(--muted)", fontSize: "0.7rem", letterSpacing: "0.06em" }}
-            >
-              {result.contradictions.length} ÇELİŞKİ TESPİT EDİLDİ
-            </p>
-          )}
-        </div>
-        <span className={`badge ${badgeClass} shrink-0`}>
-          {CONFIDENCE_LABEL[conf] ?? conf} GÜVEN
-        </span>
+      <h2
+        className="font-display leading-none mb-1"
+        style={{ fontSize: "clamp(2rem, 5vw, 3rem)", color: "var(--paper)" }}
+      >
+        {result.person_name || "—"}
+      </h2>
+      <div className="flex items-center gap-2 mt-3">
+        <span className="badge badge-high">TANIMLI</span>
+        {noContradictions && (
+          <span className="badge badge-medium">ÇELİŞKİ BULUNAMADI</span>
+        )}
       </div>
     </div>
   );
 }
 
-/** Single contradiction clipping card */
-function ContradictionCard({ c, index }: { c: Contradiction; index: number }) {
-  const conf = c.confidence;
-  const badgeClass =
-    conf === "high" ? "badge-high" : conf === "medium" ? "badge-medium" : "badge-low";
+// ── Contradiction card ────────────────────────────────────────────────────────
+
+function ContradictionCard({
+  c,
+  index,
+}: {
+  c: Contradiction;
+  index: number;
+}) {
+  const displayUrl = (() => {
+    try {
+      return new URL(c.source_url).hostname.replace("www.", "");
+    } catch {
+      return c.source_url.slice(0, 40);
+    }
+  })();
 
   return (
-    <div
-      className="evidence-card stamp-in mb-4"
-      style={{ animationDelay: `${index * 0.06}s` }}
-    >
-      {/* Header */}
+    <div className="evidence-card flagged stamp-in">
+      {/* Summary */}
       <div
-        className="flex items-center justify-between px-4 py-2"
+        className="px-4 pt-4 pb-3"
         style={{ borderBottom: "1px solid var(--border)" }}
       >
-        <p className="eyebrow">ÇELİŞKİ #{index + 1}</p>
-        <span className={`badge ${badgeClass}`}>
-          {CONFIDENCE_LABEL[conf] ?? conf}
-        </span>
+        <p className="eyebrow mb-1">ÇELİŞKİ {index + 1}</p>
+        <p
+          className="font-code"
+          style={{ fontSize: "0.78rem", color: "var(--paper)", lineHeight: 1.6 }}
+        >
+          {c.summary}
+        </p>
       </div>
 
-      {/* Summary */}
-      <p
-        className="font-code px-4 py-3"
-        style={{ color: "var(--paper)", fontSize: "0.78rem", lineHeight: 1.7, borderBottom: "1px solid var(--border)" }}
+      {/* Side-by-side statements with ≠ divider */}
+      <div
+        className="grid items-start p-4 gap-3"
+        style={{ gridTemplateColumns: "1fr auto 1fr" }}
       >
-        {c.summary}
-      </p>
-
-      {/* Two-column statements */}
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr]">
         {/* Old statement */}
-        <div className="p-4" style={{ borderRight: "1px solid var(--border)" }}>
-          <p className="datestamp mb-2">ESKİ BEYAN{c.date_a ? ` · ${c.date_a}` : ""}</p>
+        <div>
+          <p className="datestamp mb-2">{c.date_a || "tarih belirsiz"}</p>
           <p
             className="font-code"
-            style={{ color: "var(--paper)", fontSize: "0.78rem", lineHeight: 1.7 }}
+            style={{ fontSize: "0.75rem", color: "var(--muted)", lineHeight: 1.65 }}
           >
             &ldquo;{c.statement_a}&rdquo;
           </p>
         </div>
 
-        {/* Divider symbol */}
-        <div
-          className="flex items-center justify-center px-3 py-4 sm:py-0"
-          style={{ borderBottom: "1px solid var(--border)", fontSize: "1.5rem", color: "var(--accent)", fontWeight: 700 }}
-        >
-          ≠
+        {/* Divider */}
+        <div className="flex items-center justify-center px-2 pt-5">
+          <span
+            className="font-display"
+            style={{ fontSize: "2.25rem", color: "var(--accent)", lineHeight: 1 }}
+          >
+            ≠
+          </span>
         </div>
 
         {/* New statement */}
-        <div className="p-4">
-          <p className="datestamp mb-2">YENİ BEYAN{c.date_b ? ` · ${c.date_b}` : ""}</p>
+        <div>
+          <p className="datestamp mb-2">{c.date_b || "tarih belirsiz"}</p>
           <p
             className="font-code"
-            style={{ color: "var(--paper)", fontSize: "0.78rem", lineHeight: 1.7 }}
+            style={{ fontSize: "0.75rem", color: "var(--paper)", lineHeight: 1.65 }}
           >
             &ldquo;{c.statement_b}&rdquo;
           </p>
@@ -144,17 +155,18 @@ function ContradictionCard({ c, index }: { c: Contradiction; index: number }) {
       {/* Source footnote */}
       {c.source_url && (
         <div
-          className="px-4 py-2"
-          style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}
+          className="px-4 pb-3"
+          style={{ borderTop: "1px solid var(--border)" }}
         >
-          <span className="eyebrow" style={{ marginRight: "0.5rem" }}>KAYNAK:</span>
+          <p className="datestamp mt-2 mb-1">KAYNAK</p>
           <a
             href={c.source_url}
             target="_blank"
             rel="noopener noreferrer"
             className="footnote-link"
+            title={c.source_url}
           >
-            {c.source_url}
+            {displayUrl}
           </a>
         </div>
       )}
@@ -162,388 +174,326 @@ function ContradictionCard({ c, index }: { c: Contradiction; index: number }) {
   );
 }
 
-/** Single reply card */
-function ReplyCard({ tone, reply }: { tone: ToneKey; reply: ReplyContent }) {
-  const [copied, setCopied] = useState(false);
+// ── Reply card ────────────────────────────────────────────────────────────────
 
+function ReplyCard({ tone, reply }: { tone: ToneId; reply: ReplyContent }) {
   const textToCopy =
-    tone === "thread" && reply.thread.length > 0
-      ? reply.thread.join("\n\n")
-      : reply.tweet_text;
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-    } catch {
-      const el = document.createElement("textarea");
-      el.value = textToCopy;
-      Object.assign(el.style, { position: "absolute", left: "-9999px" });
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+    reply.thread.length > 0 ? reply.thread.join("\n\n") : reply.tweet_text;
 
   return (
     <div className="evidence-card stamp-in flex flex-col">
       {/* Tone header */}
       <div
-        className="flex items-center justify-between px-4 py-2"
+        className="px-4 py-3 flex items-center justify-between gap-4"
         style={{ borderBottom: "1px solid var(--border)" }}
       >
-        <p
-          className="font-display"
-          style={{ fontSize: "1.25rem", color: "var(--accent)", lineHeight: 1 }}
+        <h3
+          className="font-display leading-none"
+          style={{ fontSize: "1.5rem", color: "var(--accent)" }}
         >
-          {TONE_LABELS[tone]}
-        </p>
-        <p className="eyebrow">{TONE_DESC[tone]}</p>
+          {TONE_HEADER[tone]}
+        </h3>
+        <CopyButton text={textToCopy} />
       </div>
 
-      {/* Reply content */}
-      <div className="flex-1 p-4">
-        {tone === "thread" && reply.thread.length > 0 ? (
-          <ol className="flex flex-col gap-3">
-            {reply.thread.map((tweet, i) => (
-              <li
+      {/* Reply text */}
+      <div className="px-4 py-4 flex-1">
+        <p
+          className="font-code"
+          style={{ fontSize: "0.8125rem", color: "var(--paper)", lineHeight: 1.75 }}
+        >
+          {reply.tweet_text}
+        </p>
+
+        {/* Thread parts */}
+        {reply.thread.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2">
+            {reply.thread.map((t, i) => (
+              <p
                 key={i}
                 className="font-code"
                 style={{
-                  borderLeft: "2px solid var(--accent)",
-                  paddingLeft: "0.75rem",
-                  fontSize: "0.82rem",
+                  fontSize: "0.78rem",
+                  color: "var(--muted)",
                   lineHeight: 1.7,
-                  color: "var(--paper)",
+                  paddingLeft: "0.75rem",
+                  borderLeft: "1px solid var(--border)",
                 }}
               >
-                {tweet}
-              </li>
+                {t}
+              </p>
             ))}
-          </ol>
-        ) : (
-          <p
-            className="font-code"
-            style={{ fontSize: "0.9rem", lineHeight: 1.8, color: "var(--paper)" }}
-          >
-            {reply.tweet_text}
-          </p>
+          </div>
         )}
-      </div>
 
-      {/* Disclaimer + copy */}
-      <div
-        className="flex items-end justify-between gap-3 px-4 py-3"
-        style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}
-      >
+        {/* Legal disclaimer */}
         {reply.disclaimer && (
-          <p className="datestamp flex-1">{reply.disclaimer}</p>
+          <p className="datestamp mt-3">{reply.disclaimer}</p>
         )}
-        <button onClick={copy} className={`btn-ghost shrink-0 ${copied ? "copied-flash" : ""}`}>
-          {copied ? "Kopyalandı ✓" : "Kopyala"}
-        </button>
       </div>
     </div>
   );
 }
 
-/** Source list — footnote style */
+// ── Sources list ──────────────────────────────────────────────────────────────
+
 function SourcesList({ sources }: { sources: string[] }) {
-  if (!sources.length) return null;
+  if (sources.length === 0) return null;
   return (
-    <div className="evidence-card stamp-in">
-      <div className="px-4 py-2" style={{ borderBottom: "1px solid var(--border)" }}>
-        <p className="eyebrow">KAYNAKLAR</p>
-      </div>
-      <ol className="px-4 py-3 flex flex-col gap-1.5">
-        {sources.map((url, i) => (
-          <li key={i} className="flex items-baseline gap-2">
-            <span className="datestamp shrink-0">[{i + 1}]</span>
-            <a href={url} target="_blank" rel="noopener noreferrer" className="footnote-link break-all">
-              {url}
-            </a>
-          </li>
-        ))}
+    <div className="evidence-card stamp-in p-4">
+      <p className="eyebrow mb-3">KAYNAKLAR</p>
+      <ol className="flex flex-col gap-1.5">
+        {sources.map((url, i) => {
+          const host = (() => {
+            try {
+              return new URL(url).hostname.replace("www.", "");
+            } catch {
+              return url.slice(0, 50);
+            }
+          })();
+          return (
+            <li key={i} className="flex items-baseline gap-2">
+              <span className="datestamp shrink-0">[{i + 1}]</span>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="footnote-link"
+                title={url}
+              >
+                {host}
+              </a>
+            </li>
+          );
+        })}
       </ol>
     </div>
   );
 }
 
-// ── Main page ───────────────────────────────────────────────────────────────
+// ── Loading state ─────────────────────────────────────────────────────────────
 
-type Tones = Record<ToneKey, boolean>;
+function LoadingState() {
+  return (
+    <div className="flex flex-col gap-5 pt-8">
+      <div className="scanning" />
+      <p
+        className="font-code cursor-blink"
+        style={{ fontSize: "0.75rem", color: "var(--muted)", letterSpacing: "0.12em" }}
+      >
+        ARAŞTIRILIYOR
+      </p>
+      <div className="scanning" style={{ opacity: 0.5 }} />
+      <div className="scanning" style={{ opacity: 0.3 }} />
+    </div>
+  );
+}
+
+// ── Page state type ───────────────────────────────────────────────────────────
+
+type PageState =
+  | { phase: "idle" }
+  | { phase: "loading" }
+  | { phase: "error"; message: string; isWarning: boolean }
+  | { phase: "result"; data: AnalysisResult };
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function OppositionPage() {
-  const [tweetText, setTweetText] = useState("");
-  const [tones, setTones] = useState<Tones>({ cold: true, sharp: true, thread: true });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isWarning, setIsWarning] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [tweetText, setTweetText]           = useState("");
+  const [twitterHandle, setTwitterHandle]   = useState("");
+  const [selectedTones, setSelectedTones]   = useState<ToneId[]>(["cold", "sharp", "thread"]);
+  const [pageState, setPageState]           = useState<PageState>({ phase: "idle" });
 
-  const selectedTones = TONE_KEYS.filter((k) => tones[k]);
-  const canSubmit = tweetText.trim().length > 0 && selectedTones.length > 0 && !loading;
+  const toggleTone = (id: ToneId) => {
+    setSelectedTones((prev) =>
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+    );
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setLoading(true);
-    setError(null);
-    setIsWarning(false);
-    setResult(null);
-
+  const handleSubmit = async () => {
+    if (!tweetText.trim() || selectedTones.length === 0) return;
+    setPageState({ phase: "loading" });
     try {
-      const data = await runOppositionAnalysis(tweetText, selectedTones);
-      setResult(data);
+      const data = await runOppositionAnalysis(
+        tweetText,
+        selectedTones,
+        twitterHandle || undefined
+      );
+      setPageState({ phase: "result", data });
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message);
-        setIsWarning(err.status === 422);
+        setPageState({
+          phase: "error",
+          message: err.message,
+          isWarning: err.status === 422,
+        });
       } else {
-        setError("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.");
-        setIsWarning(false);
+        setPageState({
+          phase: "error",
+          message: "Sunucuya bağlanılamadı. Backend servisinin çalıştığından emin olun.",
+          isWarning: false,
+        });
       }
-    } finally {
-      setLoading(false);
     }
   };
 
-  const toggleTone = (key: ToneKey) =>
-    setTones((prev) => ({ ...prev, [key]: !prev[key] }));
+  const isLoading = pageState.phase === "loading";
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="min-h-[calc(100vh-48px)] max-w-6xl mx-auto">
+      {/* ── Two-column grid with 1px separator ──────────────────── */}
+      <div
+        className="grid grid-cols-1 lg:grid-cols-[40%_1fr]"
+        style={{ gap: "1px", background: "var(--border)", minHeight: "calc(100vh - 48px)" }}
+      >
 
-      {/* ── Page header ────────────────────────────────────────────── */}
-      <div className="mb-8 stagger-in">
-        <p className="eyebrow mb-2">ARAŞTIRMA &amp; YANITLAMA</p>
-        <h1
-          className="font-display leading-none"
-          style={{ fontSize: "clamp(2.5rem, 7vw, 5rem)", color: "var(--paper)" }}
-        >
-          MUHALİF MOD
-        </h1>
-        <div className="rule-red mt-3" />
-      </div>
-
-      {/* ── Two-column layout ────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-0">
-
-        {/* ── LEFT: Input panel ──────────────────────────────────── */}
+        {/* ══════ LEFT — Input ══════ */}
         <div
-          className="lg:border-r py-0 lg:pr-6"
-          style={{ borderColor: "var(--border)" }}
+          className="flex flex-col gap-6 p-6"
+          style={{ background: "var(--bg)" }}
         >
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5 stagger-in">
-
-            {/* Tweet textarea */}
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="tweet-input"
-                className="eyebrow"
-              >
-                Tweet metni
-              </label>
-              <textarea
-                id="tweet-input"
-                rows={5}
-                value={tweetText}
-                onChange={(e) => setTweetText(e.target.value)}
-                placeholder="Tweet metnini buraya yapıştırın…"
-                className="field"
-                style={{ minHeight: "120px" }}
-              />
-            </div>
-
-            {/* Tone selector */}
-            <div className="flex flex-col gap-2">
-              <p className="eyebrow">Yanıt tonu</p>
-              <div className="flex flex-col gap-1">
-                {TONE_KEYS.map((key) => (
-                  <label
-                    key={key}
-                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors"
-                    style={{
-                      border: "1px solid",
-                      borderColor: tones[key] ? "var(--accent)" : "var(--border)",
-                      background: tones[key] ? "rgba(232,25,44,0.06)" : "var(--surface)",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={tones[key]}
-                      onChange={() => toggleTone(key)}
-                      className="shrink-0"
-                    />
-                    <span className="flex-1">
-                      <span
-                        className="font-display block"
-                        style={{
-                          fontSize: "1.1rem",
-                          lineHeight: 1,
-                          color: tones[key] ? "var(--accent)" : "var(--paper)",
-                        }}
-                      >
-                        {TONE_LABELS[key]}
-                      </span>
-                      <span className="datestamp">{TONE_DESC[key]}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {selectedTones.length === 0 && (
-                <p className="datestamp" style={{ color: "var(--accent)" }}>
-                  En az bir ton seçmelisiniz.
-                </p>
-              )}
-            </div>
-
-            {/* Submit button */}
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="btn-primary w-full"
+          {/* Heading */}
+          <div>
+            <p className="eyebrow mb-2">MOD 01 · Muhalif Analiz</p>
+            <h1
+              className="font-display leading-none"
+              style={{ fontSize: "clamp(2.5rem, 6vw, 4rem)", color: "var(--paper)" }}
             >
-              {loading ? (
-                <span className="cursor-blink">Araştırılıyor</span>
-              ) : (
-                "ANALİZ ET →"
-              )}
-            </button>
+              MUHALİF MOD
+            </h1>
+            <div className="rule-red mt-3" />
+          </div>
 
-          </form>
+          {/* Tweet textarea */}
+          <div>
+            <label htmlFor="tweet-input" className="eyebrow mb-2 block">
+              TWEET METNİ
+            </label>
+            <textarea
+              id="tweet-input"
+              className="field"
+              rows={6}
+              value={tweetText}
+              onChange={(e) => setTweetText(e.target.value)}
+              placeholder="Tweet metnini buraya yapıştırın..."
+              disabled={isLoading}
+            />
+          </div>
+
+          {/* Twitter handle */}
+          <div>
+            <label htmlFor="handle-input" className="eyebrow mb-2 block">
+              TWITTER KULLANICI ADI{" "}
+              <span style={{ color: "var(--dim)" }}>(isteğe bağlı)</span>
+            </label>
+            <input
+              id="handle-input"
+              type="text"
+              className="field"
+              value={twitterHandle}
+              onChange={(e) => setTwitterHandle(e.target.value)}
+              placeholder="@kullaniciadi"
+              disabled={isLoading}
+            />
+          </div>
+
+          {/* Tone pills */}
+          <div>
+            <p className="eyebrow mb-2">YANIT TONU</p>
+            <div className="flex flex-wrap gap-2">
+              {TONES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`tone-pill ${selectedTones.includes(t.id) ? "active" : ""}`}
+                  onClick={() => toggleTone(t.id)}
+                  disabled={isLoading}
+                  aria-pressed={selectedTones.includes(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            type="button"
+            className="btn-primary w-full"
+            onClick={handleSubmit}
+            disabled={isLoading || !tweetText.trim() || selectedTones.length === 0}
+          >
+            {isLoading ? (
+              <span className="cursor-blink">ANALİZ EDİLİYOR</span>
+            ) : (
+              "ANALİZ ET →"
+            )}
+          </button>
         </div>
 
-        {/* ── RIGHT: Results panel ───────────────────────────────── */}
-        <div className="lg:pl-6 pt-8 lg:pt-0">
-
-          {/* Loading scan */}
-          {loading && (
-            <div>
-              <p
-                className="eyebrow mb-3 cursor-blink"
-                style={{ color: "var(--accent)" }}
-              >
-                Araştırılıyor
-              </p>
-              <LoadingBar />
-              <LoadingBar />
-              <LoadingBar />
-            </div>
-          )}
-
-          {/* Error / Warning banner */}
-          {error && !loading && (
-            <div
-              className="stamp-in mb-6 px-4 py-3 flex items-start gap-3"
-              style={{
-                border: `1px solid ${isWarning ? "rgba(245,158,11,0.4)" : "rgba(239,68,68,0.4)"}`,
-                background: isWarning ? "rgba(245,158,11,0.06)" : "rgba(239,68,68,0.06)",
-              }}
-            >
-              <span style={{ color: isWarning ? "#fbbf24" : "#fca5a5", marginTop: "1px" }}>
-                {isWarning ? "⚠" : "✕"}
-              </span>
+        {/* ══════ RIGHT — Results ══════ */}
+        <div
+          className="p-6 flex flex-col gap-5"
+          style={{ background: "var(--bg)" }}
+        >
+          {/* Idle */}
+          {pageState.phase === "idle" && (
+            <div className="flex items-center justify-center h-full min-h-[300px]">
               <p
                 className="font-code"
-                style={{
-                  color: isWarning ? "#fbbf24" : "#fca5a5",
-                  fontSize: "0.78rem",
-                  lineHeight: 1.6,
-                }}
+                style={{ color: "var(--paper)", opacity: 0.3, fontSize: "0.8rem", letterSpacing: "0.12em" }}
               >
-                {error}
+                // analiz bekleniyor
               </p>
             </div>
           )}
 
-          {/* Empty state */}
-          {!loading && !error && !result && (
-            <div
-              className="flex items-center justify-center"
-              style={{ minHeight: "200px" }}
-            >
-              <p
-                className="font-code cursor-blink"
-                style={{ color: "var(--muted)", fontSize: "0.78rem", letterSpacing: "0.06em" }}
-              >
-                ANALİZ BEKLENİYOR
-              </p>
+          {/* Loading */}
+          {pageState.phase === "loading" && <LoadingState />}
+
+          {/* Error / warning */}
+          {pageState.phase === "error" && (
+            <div className={pageState.isWarning ? "warn-box" : "error-box"}>
+              {pageState.message}
             </div>
           )}
 
           {/* Results */}
-          {result && !loading && (
-            <div className="flex flex-col gap-8">
+          {pageState.phase === "result" && (
+            <>
+              <PersonBadge result={pageState.data} />
 
-              {/* Person badge */}
-              <PersonBadge result={result} />
-
-              {/* No contradictions */}
-              {result.status === "no_contradictions_found" && (
-                <div
-                  className="evidence-card stamp-in px-5 py-6 text-center"
-                >
-                  <p className="font-display" style={{ fontSize: "1.5rem", color: "var(--muted)" }}>
-                    ÇELİŞKİ BULUNAMADI
+              {pageState.data.contradictions.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <p className="eyebrow">
+                    ÇELİŞKİLER — {pageState.data.contradictions.length} BULGU
                   </p>
-                  <p className="font-code mt-2" style={{ color: "var(--muted)", fontSize: "0.73rem" }}>
-                    Bu tweet için geçmişte tutarsız bir beyan tespit edilemedi.
-                  </p>
+                  {pageState.data.contradictions.map((c, i) => (
+                    <ContradictionCard key={i} c={c} index={i} />
+                  ))}
                 </div>
               )}
 
-              {/* Contradictions */}
-              {result.contradictions.length > 0 && (
-                <section>
-                  <p className="eyebrow mb-4">
-                    TESPİT EDİLEN ÇELİŞKİLER — {result.contradictions.length} KAYIT
-                  </p>
-                  {result.contradictions.map((c, i) => (
-                    <ContradictionCard key={i} c={c} index={i} />
-                  ))}
-                </section>
+              {(["cold", "sharp", "thread"] as ToneId[]).some(
+                (t) => pageState.data.replies[t] != null
+              ) && (
+                <div className="flex flex-col gap-3">
+                  <p className="eyebrow">YANITLAR</p>
+                  {(["cold", "sharp", "thread"] as ToneId[]).map((tone) => {
+                    const reply = pageState.data.replies[tone];
+                    return reply ? (
+                      <ReplyCard key={tone} tone={tone} reply={reply} />
+                    ) : null;
+                  })}
+                </div>
               )}
 
-              {/* Replies */}
-              {TONE_KEYS.some((t) => result.replies[t] !== null) && (
-                <section>
-                  <p className="eyebrow mb-4">ÜRETİLEN YANITLAR</p>
-                  <div className="grid grid-cols-1 xl:grid-cols-3 gap-0">
-                    {TONE_KEYS.map((tone, i) => {
-                      const reply = result.replies[tone];
-                      if (!reply) return null;
-                      return (
-                        <div
-                          key={tone}
-                          style={{
-                            borderRight: i < TONE_KEYS.length - 1 ? "1px solid var(--border)" : undefined,
-                          }}
-                        >
-                          <ReplyCard tone={tone} reply={reply} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {TONE_KEYS.every((t) => result.replies[t] === null) && (
-                    <p
-                      className="font-code text-center py-6"
-                      style={{ color: "var(--muted)", fontSize: "0.73rem" }}
-                    >
-                      Tüm yanıtlar hukuki güvenlik filtresi tarafından engellendi.
-                    </p>
-                  )}
-                </section>
+              {pageState.data.sources.length > 0 && (
+                <SourcesList sources={pageState.data.sources} />
               )}
-
-              {/* Sources */}
-              <SourcesList sources={result.sources} />
-
-            </div>
+            </>
           )}
-
         </div>
       </div>
     </div>

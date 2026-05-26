@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════
-   DESIGN TOKENS — Newsroom / Evidence Room
+   DESIGN TOKENS — Neo-brutalist intelligence tool
+   "Bloomberg Terminal meets redacted government document"
    Background: #0a0a0a  Text: #f0ece0  Accent: #e8192c
 ═══════════════════════════════════════════════════════════ */
 
@@ -9,9 +10,10 @@
   --bg:        #0a0a0a;
   --paper:     #f0ece0;
   --accent:    #e8192c;
+  --warn:      #f5c518;
   --muted:     #6b6867;
   --dim:       #3a3734;
-  --border:    #252525;
+  --border:    #2a2a2a;
   --surface:   #111111;
   --surface-2: #161616;
 }
@@ -24,10 +26,9 @@
   --color-dim:     var(--dim);
   --color-surface: var(--surface);
   --font-display:  var(--font-bebas);
-  --font-code:     var(--font-jetbrains);
-  /* Keep geist available for any legacy uses */
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-jetbrains);
+  --font-code:     var(--font-ibm-mono);
+  --font-sans:     var(--font-ibm-mono);
+  --font-mono:     var(--font-ibm-mono);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -42,7 +43,7 @@ html {
 body {
   background: var(--bg);
   color: var(--paper);
-  font-family: var(--font-jetbrains), "Courier New", monospace;
+  font-family: var(--font-ibm-mono), "Courier New", monospace;
   font-size: 0.875rem;
   line-height: 1.6;
 }
@@ -51,14 +52,14 @@ body {
   box-sizing: border-box;
 }
 
-/* Remove all border-radius globally — sharp edges everywhere */
+/* Sharp edges everywhere — no rounding except .badge */
 *:not(.badge) {
   border-radius: 0 !important;
 }
 
 ::selection {
   background: var(--accent);
-  color: #fff;
+  color: #000;
 }
 
 /* Minimal scrollbar */
@@ -72,24 +73,24 @@ body {
 
 /* Page-load stagger reveal */
 @keyframes fadeSlideUp {
-  from { opacity: 0; transform: translateY(14px); }
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Document stamp — results appearing */
 @keyframes stampIn {
-  0%   { opacity: 0; transform: scale(0.97) translateY(6px); }
-  65%  { transform: scale(1.005) translateY(0); }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
+  0%   { opacity: 0; transform: scale(0.97); }
+  70%  { transform: scale(1.005); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
-/* Horizontal scan line across a container */
+/* Horizontal red scan line */
 @keyframes scanAcross {
-  0%   { left: -100%; }
-  100% { left: 100%; }
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
 }
 
-/* Pulse blink for status indicators */
+/* Pulse blink */
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
@@ -98,7 +99,7 @@ body {
 /* Stagger children on mount */
 .stagger-in > * {
   opacity: 0;
-  animation: fadeSlideUp 0.35s ease forwards;
+  animation: fadeSlideUp 0.32s ease forwards;
 }
 .stagger-in > *:nth-child(1) { animation-delay: 0.04s; }
 .stagger-in > *:nth-child(2) { animation-delay: 0.10s; }
@@ -107,31 +108,28 @@ body {
 .stagger-in > *:nth-child(5) { animation-delay: 0.28s; }
 .stagger-in > *:nth-child(6) { animation-delay: 0.34s; }
 
-/* Stamp a result card into view */
+/* Stamp a result into view */
 .stamp-in {
-  animation: stampIn 0.28s cubic-bezier(0.2, 0, 0.2, 1.3) both;
+  animation: stampIn 0.25s cubic-bezier(0.2, 0, 0.2, 1.2) both;
 }
 
-/* Scanning loader container */
+/* Scanning loader strip */
 .scanning {
   position: relative;
   overflow: hidden;
+  height: 2px;
+  background: var(--border);
 }
 .scanning::after {
   content: '';
   position: absolute;
-  top: 0; bottom: 0;
-  width: 60%;
-  background: linear-gradient(
-    to right,
-    transparent,
-    color-mix(in srgb, var(--accent) 25%, transparent),
-    transparent
-  );
-  animation: scanAcross 1.4s linear infinite;
+  inset-block: 0;
+  width: 50%;
+  background: var(--accent);
+  animation: scanAcross 1.2s linear infinite;
 }
 
-/* Blinking cursor */
+/* Blinking cursor suffix */
 .cursor-blink::after {
   content: '▋';
   animation: blink 1s step-end infinite;
@@ -139,20 +137,29 @@ body {
   margin-left: 2px;
 }
 
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════
    TYPOGRAPHY
 ═══════════════════════════════════════════════════════════ */
 
-/* Eyebrow label — uppercase mono, muted */
+/* Eyebrow — uppercase mono label */
 .eyebrow {
-  font-family: var(--font-jetbrains), monospace;
-  font-size: 0.65rem;
-  letter-spacing: 0.14em;
+  font-family: var(--font-ibm-mono), monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-/* Section divider — thin red line */
+/* Red rule */
 .rule-red {
   border: none;
   border-top: 1px solid var(--accent);
@@ -166,25 +173,20 @@ body {
 .field {
   display: block;
   width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 1px solid var(--paper);
   color: var(--paper);
-  font-family: var(--font-jetbrains), monospace;
+  font-family: var(--font-ibm-mono), monospace;
   font-size: 0.8125rem;
   padding: 0.625rem 0.75rem;
   outline: none;
-  transition: border-color 0.12s;
+  transition: border-color 0.1s;
   resize: none;
 }
 .field:focus { border-color: var(--accent); }
-.field::placeholder { color: var(--muted); }
+.field::placeholder { color: var(--muted); opacity: 0.6; }
 
-/* Checkbox base */
-input[type="checkbox"] {
-  accent-color: var(--accent);
-}
-
-/* Select */
+/* Select arrow */
 select.field {
   cursor: pointer;
   appearance: none;
@@ -195,8 +197,80 @@ select.field {
   padding-right: 2rem;
 }
 
+/* Checkbox */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
 /* ═══════════════════════════════════════════════════════════
-   EVIDENCE CARD  — newspaper clipping style
+   BUTTONS
+═══════════════════════════════════════════════════════════ */
+
+/* Primary — red bg, black Bebas text, 48px height */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 48px;
+  background: var(--accent);
+  color: #000;
+  font-family: var(--font-bebas), sans-serif;
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  padding: 0 1.5rem;
+  border: 1px solid var(--accent);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.btn-primary:hover    { background: #c8151f; border-color: #c8151f; color: #000; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Ghost — transparent, paper border */
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ibm-mono), monospace;
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+}
+.btn-ghost:hover    { color: var(--paper); border-color: var(--dim); }
+.btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════════════════════════
+   LANDING MODE CARDS
+   1px red border, transparent bg → hover: red fill, text→ black
+═══════════════════════════════════════════════════════════ */
+
+.card-mode {
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--paper);
+  transition: background 0.12s, color 0.12s;
+  cursor: pointer;
+  display: block;
+  text-decoration: none;
+}
+.card-mode:hover {
+  background: var(--accent);
+  color: #000;
+}
+.card-mode:hover * {
+  color: inherit !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EVIDENCE CARD — research result block
 ═══════════════════════════════════════════════════════════ */
 
 .evidence-card {
@@ -205,7 +279,7 @@ select.field {
   position: relative;
 }
 
-/* Red top-edge accent on every card */
+/* Red 2px top accent line */
 .evidence-card::before {
   content: '';
   position: absolute;
@@ -213,28 +287,60 @@ select.field {
   height: 2px;
   background: var(--border);
 }
-
 .evidence-card.flagged::before {
   background: var(--accent);
 }
 
-/* Date stamp style */
+/* ═══════════════════════════════════════════════════════════
+   TONE PILL — toggle button for tone selection
+═══════════════════════════════════════════════════════════ */
+
+.tone-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.875rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ibm-mono), monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  user-select: none;
+}
+.tone-pill:hover {
+  border-color: var(--dim);
+  color: var(--paper);
+}
+.tone-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DATESTAMP / FOOTNOTE
+═══════════════════════════════════════════════════════════ */
+
 .datestamp {
-  font-size: 0.625rem;
+  font-size: 0.6rem;
   letter-spacing: 0.08em;
   color: var(--muted);
-  font-family: var(--font-jetbrains), monospace;
+  font-family: var(--font-ibm-mono), monospace;
   text-transform: uppercase;
 }
 
-/* Source footnote link */
 .footnote-link {
-  font-size: 0.625rem;
+  font-size: 0.6rem;
   letter-spacing: 0.06em;
   color: var(--muted);
   text-decoration: none;
   border-bottom: 1px solid var(--dim);
-  transition: color 0.12s, border-color 0.12s;
+  transition: color 0.1s, border-color 0.1s;
+  font-family: var(--font-ibm-mono), monospace;
 }
 .footnote-link:hover {
   color: var(--paper);
@@ -242,69 +348,50 @@ select.field {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   BADGE  — only element that gets rounded corners
+   BADGE — only element with rounded corners (2px)
 ═══════════════════════════════════════════════════════════ */
 
 .badge {
   display: inline-flex;
   align-items: center;
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: 0.15rem 0.5rem;
-  border-radius: 2px !important;  /* small rounding allowed for badges */
-  font-family: var(--font-jetbrains), monospace;
+  padding: 0.15rem 0.45rem;
+  border-radius: 2px !important;
+  font-family: var(--font-ibm-mono), monospace;
 }
-
-.badge-high   { background: rgba(16, 185, 129, 0.12); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
-.badge-medium { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-.badge-low    { background: rgba(239, 68, 68, 0.12);  color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
-.badge-accent { background: var(--accent);             color: #fff;    border: 1px solid var(--accent); }
+.badge-high   { background: rgba(16, 185, 129, 0.10); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.35); }
+.badge-medium { background: rgba(245, 193, 24, 0.10);  color: #f5c518; border: 1px solid rgba(245, 193, 24, 0.35); }
+.badge-low    { background: rgba(239, 68, 68, 0.10);   color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.35); }
+.badge-accent { background: var(--accent);              color: #000;    border: 1px solid var(--accent); }
 
 /* ═══════════════════════════════════════════════════════════
-   BUTTONS
+   WARNING BOX — 422 / user-guidance
 ═══════════════════════════════════════════════════════════ */
 
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: var(--accent);
-  color: #fff;
-  font-family: var(--font-jetbrains), monospace;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 0.625rem 1.25rem;
-  border: 1px solid var(--accent);
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+.warn-box {
+  border: 1px solid var(--warn);
+  background: rgba(245, 197, 24, 0.06);
+  color: var(--warn);
+  font-family: var(--font-ibm-mono), monospace;
+  font-size: 0.78rem;
+  padding: 0.75rem 1rem;
 }
-.btn-primary:hover  { background: #c8151f; border-color: #c8151f; }
-.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--font-jetbrains), monospace;
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.45rem 0.875rem;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: color 0.12s, border-color 0.12s;
+/* ═══════════════════════════════════════════════════════════
+   ERROR BOX — server/network errors
+═══════════════════════════════════════════════════════════ */
+
+.error-box {
+  border: 1px solid var(--accent);
+  background: rgba(232, 25, 44, 0.06);
+  color: var(--accent);
+  font-family: var(--font-ibm-mono), monospace;
+  font-size: 0.78rem;
+  padding: 0.75rem 1rem;
 }
-.btn-ghost:hover    { color: var(--paper); border-color: var(--dim); }
-.btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ═══════════════════════════════════════════════════════════
    COPY FLASH
@@ -312,4 +399,5 @@ select.field {
 
 .copied-flash {
   color: #6ee7b7 !important;
+  border-color: #6ee7b7 !important;
 }
