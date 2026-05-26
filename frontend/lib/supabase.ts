@@ -26,7 +26,9 @@ function requireEnv(name: string): string {
 }
 
 const SUPABASE_URL = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
-const SUPABASE_ANON_KEY = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+// Supabase now issues sb_publishable_* keys (replaces the old eyJ... anon JWT).
+// Both formats work with createClient() — just pass whichever you have.
+const SUPABASE_ANON_KEY = requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
 
 // ---------------------------------------------------------------------------
 // Singleton — module-level, one instance per JS context
