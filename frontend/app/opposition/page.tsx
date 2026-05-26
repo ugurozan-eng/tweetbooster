@@ -402,18 +402,37 @@ export default function OppositionPage() {
           <div>
             <p className="eyebrow mb-2">YANIT TONU</p>
             <div className="flex flex-wrap gap-2">
-              {TONES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`tone-pill ${selectedTones.includes(t.id) ? "active" : ""}`}
-                  onClick={() => toggleTone(t.id)}
-                  disabled={isLoading}
-                  aria-pressed={selectedTones.includes(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
+              {TONES.map((t) => {
+                const isActive = selectedTones.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => toggleTone(t.id)}
+                    disabled={isLoading}
+                    aria-pressed={isActive}
+                    style={{
+                      display:        "inline-flex",
+                      alignItems:     "center",
+                      justifyContent: "center",
+                      padding:        "0.35rem 0.875rem",
+                      border:         `1px solid ${isActive ? "var(--accent)" : "var(--border)"}`,
+                      background:     isActive ? "var(--accent)" : "transparent",
+                      color:          isActive ? "#000" : "var(--muted)",
+                      fontFamily:     "var(--font-ibm-mono), monospace",
+                      fontSize:       "0.65rem",
+                      letterSpacing:  "0.12em",
+                      textTransform:  "uppercase",
+                      cursor:         isLoading ? "not-allowed" : "pointer",
+                      opacity:        isLoading ? 0.4 : 1,
+                      transition:     "background 0.1s, color 0.1s, border-color 0.1s",
+                      userSelect:     "none",
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
